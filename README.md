@@ -17,32 +17,6 @@
 
 ---
 
-## Mục lục
-
-- [Giới thiệu](#giới-thiệu)
-- [Trạng thái dự án](#trạng-thái-dự-án)
-- [Bối cảnh hệ thống](#bối-cảnh-hệ-thống)
-- [Kiến trúc ứng dụng](#kiến-trúc-ứng-dụng)
-- [Luồng dữ liệu](#luồng-dữ-liệu)
-- [Chức năng đã thực hiện](#chức-năng-đã-thực-hiện)
-- [Chức năng dự kiến](#chức-năng-dự-kiến)
-- [Cấu trúc thư mục](#cấu-trúc-thư-mục)
-- [Công nghệ sử dụng](#công-nghệ-sử-dụng)
-- [Cài đặt dự án](#cài-đặt-dự-án)
-- [Build và chạy ứng dụng](#build-và-chạy-ứng-dụng)
-- [Kiểm thử](#kiểm-thử)
-- [Xử lý packet](#xử-lý-packet)
-- [Các vấn đề kỹ thuật quan trọng](#các-vấn-đề-kỹ-thuật-quan-trọng)
-- [Quy trình Git](#quy-trình-git)
-- [Bảo mật và quyền riêng tư](#bảo-mật-và-quyền-riêng-tư)
-- [Hạn chế hiện tại](#hạn-chế-hiện-tại)
-- [Lộ trình phát triển](#lộ-trình-phát-triển)
-- [Đóng góp](#đóng-góp)
-- [Tác giả](#tác-giả)
-- [Giấy phép](#giấy-phép)
-
----
-
 ## Giới thiệu
 
 Mục tiêu của BioSignalMonitor là xây dựng một ứng dụng Android có khả năng giám sát tín hiệu y sinh theo thời gian thực một cách ổn định, dễ mở rộng và dễ kiểm thử.
@@ -63,10 +37,6 @@ Việc tách riêng tầng truyền dữ liệu, tầng giao thức, tầng lưu
 
 ## Trạng thái dự án
 
-**Giai đoạn hiện tại:** Xây dựng nguyên mẫu luồng xử lý dữ liệu Android.
-
-### Đã có
-
 - Project Android sử dụng Kotlin.
 - Giao diện Jetpack Compose.
 - Mô hình dữ liệu `BioPacket`.
@@ -76,24 +46,6 @@ Việc tách riêng tầng truyền dữ liệu, tầng giao thức, tầng lưu
 - Nguồn dữ liệu giả phục vụ kiểm thử.
 - Thành phần vẽ waveform tùy chỉnh.
 - Tầng quản lý trạng thái ban đầu.
-
-### Đang thực hiện
-
-- Quét thiết bị BLE.
-- Kết nối GATT.
-- Khám phá service và characteristic.
-- Nhận notification từ BLE.
-- Tự động kết nối lại khi mất kết nối.
-- Hiển thị liên tục ba tín hiệu ECG, PPG và PCG.
-- Phát hiện mất packet và gián đoạn sequence.
-
-### Chưa hoàn thành
-
-- Tích hợp BLE hoàn chỉnh với thiết bị nhúng thật.
-- Kiểm thử chạy dài hạn.
-- Ghi và xuất dữ liệu CSV.
-- Xác thực tín hiệu theo tiêu chuẩn y tế.
-- Cấu hình bản phát hành production.
 
 ---
 
@@ -260,49 +212,6 @@ Các kiểm tra dự kiến ở tầng packet:
 
 ---
 
-## Cấu trúc thư mục
-
-```text
-BioSignalMonitor/
-├── app/
-│   ├── build.gradle.kts
-│   └── src/
-│       ├── androidTest/
-│       │   └── java/com/example/biosignalmonitor/
-│       │       └── ExampleInstrumentedTest.kt
-│       ├── main/
-│       │   ├── AndroidManifest.xml
-│       │   ├── java/com/example/biosignalmonitor/
-│       │   │   ├── MainActivity.kt
-│       │   │   ├── WaveformCanvas.kt
-│       │   │   ├── fake/
-│       │   │   │   └── FakeBleSource.kt
-│       │   │   ├── protocol/
-│       │   │   │   ├── BioPacket.kt
-│       │   │   │   ├── PacketAssembler.kt
-│       │   │   │   └── PacketParser.kt
-│       │   │   ├── signal/
-│       │   │   │   ├── RingBuffer.kt
-│       │   │   │   └── SignalViewModel.kt
-│       │   │   └── ui/theme/
-│       │   │       ├── Color.kt
-│       │   │       ├── Theme.kt
-│       │   │       └── Type.kt
-│       │   └── res/
-│       └── test/
-│           └── java/com/example/biosignalmonitor/
-│               └── ExampleUnitTest.kt
-├── gradle/
-├── build.gradle.kts
-├── gradle.properties
-├── settings.gradle.kts
-├── gradlew
-├── gradlew.bat
-└── README.md
-```
-
----
-
 ## Công nghệ sử dụng
 
 | Hạng mục | Công nghệ |
@@ -333,91 +242,9 @@ Cần cài đặt:
 
 Để kiểm thử BLE thật, thiết bị Android cần hỗ trợ Bluetooth Low Energy.
 
-### Clone repository
-
-Bằng SSH:
-
-```bash
-git clone git@github.com:khanhnguyendang224440/BioSignalMonitor.git
-```
-
-Hoặc bằng HTTPS:
-
-```bash
-git clone https://github.com/khanhnguyendang224440/BioSignalMonitor.git
-```
-
-Sau đó mở thư mục project bằng Android Studio.
-
-### Đồng bộ Gradle
-
-Sau khi mở project:
-
-1. Chờ Android Studio hoàn tất Gradle Sync.
-2. Cài các thành phần SDK được yêu cầu.
-3. Chọn emulator hoặc thiết bị Android.
-4. Build và chạy ứng dụng.
-
----
-
-## Build và chạy ứng dụng
-
-### Windows PowerShell
-
-```powershell
-.\gradlew.bat assembleDebug
-```
-
-### macOS hoặc Linux
-
-```bash
-./gradlew assembleDebug
-```
-
-### Cài bản debug lên thiết bị
-
-```powershell
-.\gradlew.bat installDebug
-```
-
-### Chạy từ Android Studio
-
-1. Mở project.
-2. Chọn cấu hình chạy `app`.
-3. Chọn thiết bị.
-4. Nhấn **Run**.
-
 ---
 
 ## Kiểm thử
-
-### Chạy unit test
-
-Windows:
-
-```powershell
-.\gradlew.bat test
-```
-
-macOS hoặc Linux:
-
-```bash
-./gradlew test
-```
-
-### Chạy instrumented test
-
-Windows:
-
-```powershell
-.\gradlew.bat connectedAndroidTest
-```
-
-macOS hoặc Linux:
-
-```bash
-./gradlew connectedAndroidTest
-```
 
 ### Các trường hợp nên kiểm thử cho packet
 
@@ -464,21 +291,6 @@ Khi thay đổi định dạng packet, cần sửa đồng thời:
 4. Unit test
 5. Tài liệu giao thức
 
-### Mẫu tài liệu giao thức
-
-| Trường | Kích thước | Kiểu dữ liệu | Ý nghĩa |
-|---|---:|---|---|
-| Header | Theo thiết kế | Unsigned | Đánh dấu bắt đầu frame |
-| Sequence | Theo thiết kế | Unsigned | ID block tăng dần |
-| Timestamp | Theo thiết kế | Unsigned | Thời điểm thu mẫu |
-| Sample count | Theo thiết kế | Unsigned | Số mẫu trong block |
-| ECG payload | Theo thiết kế | Signed samples | Dữ liệu ECG |
-| PPG payload | Theo thiết kế | Unsigned hoặc signed | Dữ liệu PPG |
-| PCG payload | Theo thiết kế | Signed samples | Dữ liệu PCG |
-| CRC/checksum | Tùy chọn | Unsigned | Kiểm tra toàn vẹn dữ liệu |
-
-> Kích thước cụ thể cần được cập nhật sau khi định dạng packet cuối cùng giữa firmware và Android được chốt.
-
 ---
 
 ## Các vấn đề kỹ thuật quan trọng
@@ -493,18 +305,6 @@ Ring buffer giúp:
 - Tự động ghi đè mẫu cũ
 - Hiển thị một cửa sổ thời gian cố định
 - Tăng độ ổn định khi chạy lâu
-
-### Packet fragmentation
-
-BLE notification không đảm bảo một notification tương ứng với đúng một packet ứng dụng.
-
-Một packet có thể:
-
-- Nằm trọn trong một notification
-- Bị chia thành nhiều notification
-- Chung notification với một phần của packet tiếp theo
-
-Vì vậy cần tách riêng `PacketAssembler` và `PacketParser`.
 
 ### Hiệu năng giao diện
 
@@ -549,194 +349,9 @@ Hệ thống thực tế cần xử lý:
 
 ---
 
-## Quy trình Git
-
-Nhánh `main` được dùng làm nhánh ổn định.
-
-Mỗi chức năng mới nên được phát triển trên branch riêng.
-
-### Quy tắc đặt tên branch
-
-```text
-feature/ble-scanning
-feature/gatt-connection
-feature/realtime-waveform
-feature/csv-export
-fix/packet-fragmentation
-fix/sequence-gap
-refactor/protocol-layer
-test/packet-parser
-docs/update-readme
-```
-
-### Quy trình làm việc
-
-```bash
-git switch main
-git pull origin main
-git switch -c feature/ble-scanning
-
-# Thực hiện thay đổi
-
-git status
-git add .
-git commit -m "feat: implement BLE device scanning"
-git push -u origin feature/ble-scanning
-```
-
-Sau đó tạo Pull Request từ branch chức năng vào `main`, kiểm tra code và chỉ merge khi project build thành công.
-
-### Quy tắc commit
-
-Dự án sử dụng cách đặt commit gần với Conventional Commits:
-
-```text
-feat: thêm chức năng mới
-fix: sửa lỗi
-refactor: tái cấu trúc code nhưng không đổi chức năng
-test: thêm hoặc sửa kiểm thử
-docs: cập nhật tài liệu
-chore: thay đổi cấu hình hoặc công cụ
-perf: cải thiện hiệu năng
-```
-
-Ví dụ:
-
-```text
-feat: add BLE packet notification handler
-fix: preserve incomplete bytes between notifications
-test: add fragmented packet parser tests
-refactor: separate protocol parsing from BLE transport
-docs: document synchronized signal packet format
-```
-
----
-
-## Bảo mật và quyền riêng tư
-
-Tín hiệu y sinh có thể là dữ liệu cá nhân nhạy cảm.
-
-Trước khi dùng ứng dụng với người thật:
-
-- Không commit API key, mật khẩu, certificate hoặc signing key
-- Không lưu dữ liệu sức khỏe nếu chưa có sự đồng ý
-- Không ghi dữ liệu y sinh thô vào log công khai
-- Sử dụng truyền dữ liệu an toàn khi cần
-- Xác định chính sách lưu trữ và xóa dữ liệu
-- Bảo vệ file xuất ra
-- Kiểm tra cơ chế Android Backup
-- Chỉ yêu cầu quyền cần thiết
-- Tuân thủ quy định về quyền riêng tư và dữ liệu y tế
-
-Các file sau không được commit:
-
-```text
-local.properties
-*.jks
-*.keystore
-*.p12
-*.pem
-.env
-secrets.properties
-```
-
-Dự án phục vụ học tập, nghiên cứu và phát triển kỹ thuật. Đây **không phải thiết bị y tế đã được chứng nhận** và không được sử dụng làm căn cứ duy nhất cho chẩn đoán hoặc điều trị.
-
----
-
-## Hạn chế hiện tại
-
-- BLE với phần cứng thật chưa hoàn thành
-- Hiện vẫn dùng một phần nguồn dữ liệu giả
-- Định dạng packet chưa được chốt chính thức
-- Chưa kiểm thử waveform trong thời gian dài
-- Chưa có chức năng ghi dữ liệu hoàn chỉnh
-- Chưa có xác thực lâm sàng
-- Chưa có quy trình phát hành ứng dụng
-
----
-
-## Lộ trình phát triển
-
-### Giai đoạn 1 — Luồng xử lý giao thức
-
-- [x] Tạo mô hình dữ liệu packet
-- [x] Tạo PacketAssembler
-- [x] Tạo PacketParser
-- [x] Tạo ring buffer
-- [x] Tạo nguồn dữ liệu giả
-- [x] Tạo thành phần waveform ban đầu
-
-### Giai đoạn 2 — Tích hợp BLE
-
-- [ ] Thêm quyền Bluetooth
-- [ ] Quét thiết bị
-- [ ] Lọc thiết bị theo tên hoặc UUID
-- [ ] Kết nối GATT
-- [ ] Khám phá service và characteristic
-- [ ] Bật notification
-- [ ] Nhận packet bị phân mảnh
-- [ ] Tự động kết nối lại
-
-### Giai đoạn 3 — Giám sát thời gian thực
-
-- [ ] Hiển thị ECG
-- [ ] Hiển thị PPG
-- [ ] Hiển thị PCG
-- [ ] Hiển thị trạng thái kết nối
-- [ ] Hiển thị tốc độ packet
-- [ ] Hiển thị số sequence bị mất
-- [ ] Thêm nút pause và clear
-
-### Giai đoạn 4 — Ghi và phân tích dữ liệu
-
-- [ ] Bắt đầu và dừng phiên ghi
-- [ ] Xuất CSV
-- [ ] Lưu metadata
-- [ ] Thêm bộ lọc cơ bản
-- [ ] Hiển thị chất lượng tín hiệu
-- [ ] Kiểm tra tính liên tục của mẫu
-
-### Giai đoạn 5 — Độ ổn định
-
-- [ ] Kiểm thử chạy dài hạn
-- [ ] Kiểm tra bộ nhớ
-- [ ] Kiểm tra CPU
-- [ ] Stress test kết nối lại
-- [ ] Kiểm thử packet lỗi
-- [ ] Kiểm thử vòng đời ứng dụng
-- [ ] Cấu hình release build
-
----
-
-## Đóng góp
-
-Repository hiện được duy trì phục vụ đồ án và phát triển kỹ thuật.
-
-Khi đóng góp thay đổi:
-
-1. Tạo branch riêng.
-2. Mỗi commit chỉ nên chứa một nhóm thay đổi rõ ràng.
-3. Thêm test khi thay đổi giao thức.
-4. Cập nhật tài liệu khi thay đổi hành vi.
-5. Kiểm tra build trước khi tạo Pull Request.
-6. Không commit file cấu hình cá nhân hoặc dữ liệu nhạy cảm.
-
----
-
 ## Tác giả
 
 **Nguyễn Đăng Khánh**
 
 - GitHub: [@khanhnguyendang224440](https://github.com/khanhnguyendang224440)
 - Lĩnh vực quan tâm: Embedded Systems, IoT, Android, BLE và thu thập tín hiệu y sinh
-
----
-
-## Giấy phép
-
-Dự án hiện chưa chọn giấy phép mã nguồn.
-
-Khi chưa có license, mã nguồn vẫn thuộc quyền sở hữu mặc định của tác giả. Người khác có thể xem repository nhưng không mặc nhiên được phép sao chép, sửa đổi hoặc phân phối lại.
-
-Có thể bổ sung MIT, Apache-2.0 hoặc giấy phép phù hợp khác sau khi xác định mục đích sử dụng của dự án.
