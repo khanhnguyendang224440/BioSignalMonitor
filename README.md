@@ -1,115 +1,116 @@
 # BioSignalMonitor
 
-[![Android](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android&logoColor=white)](https://developer.android.com/)
-[![Kotlin](https://img.shields.io/badge/Language-Kotlin-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
-[![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/compose)
-[![Status](https://img.shields.io/badge/Status-In%20Development-orange)](#project-status)
+[![Android](https://img.shields.io/badge/Nền_tảng-Android-3DDC84?logo=android&logoColor=white)](https://developer.android.com/)
+[![Kotlin](https://img.shields.io/badge/Ngôn_ngữ-Kotlin-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
+[![Jetpack Compose](https://img.shields.io/badge/Giao_diện-Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/compose)
+[![Trạng thái](https://img.shields.io/badge/Trạng_thái-Đang_phát_triển-orange)](#trạng-thái-dự-án)
 
-**BioSignalMonitor** is an Android application for receiving, parsing, buffering, and visualizing synchronized biomedical signals, including:
+**BioSignalMonitor** là ứng dụng Android dùng để tiếp nhận, phân tích, lưu đệm và hiển thị theo thời gian thực ba loại tín hiệu y sinh đồng bộ:
 
-- **ECG** — Electrocardiogram
-- **PPG** — Photoplethysmogram
-- **PCG** — Phonocardiogram
+- **ECG** — Điện tâm đồ
+- **PPG** — Quang thể tích ký
+- **PCG** — Âm tâm đồ
 
-The application is part of a larger embedded biomedical monitoring system in which an STM32-based acquisition device collects synchronized ECG, PPG, and PCG samples and sends data to Android through a wireless communication layer.
+Ứng dụng là một phần của hệ thống giám sát tín hiệu y sinh, trong đó thiết bị nhúng sử dụng STM32 để thu thập đồng bộ ECG, PPG và PCG, sau đó truyền dữ liệu đến điện thoại Android qua kết nối không dây.
 
-> This repository currently focuses on the Android-side data pipeline, packet processing, signal buffering, and waveform visualization. Hardware BLE integration is under active development.
-
----
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Project Status](#project-status)
-- [System Context](#system-context)
-- [Application Architecture](#application-architecture)
-- [Data Flow](#data-flow)
-- [Implemented Features](#implemented-features)
-- [Planned Features](#planned-features)
-- [Project Structure](#project-structure)
-- [Technology Stack](#technology-stack)
-- [Getting Started](#getting-started)
-- [Build and Run](#build-and-run)
-- [Testing](#testing)
-- [Packet Processing](#packet-processing)
-- [Engineering Considerations](#engineering-considerations)
-- [Git Workflow](#git-workflow)
-- [Security and Privacy](#security-and-privacy)
-- [Known Limitations](#known-limitations)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [Author](#author)
-- [License](#license)
+> Repository hiện tập trung vào phía Android, bao gồm xử lý dữ liệu đầu vào, ghép packet, phân tích packet, lưu mẫu bằng ring buffer và hiển thị waveform. Phần kết nối BLE với thiết bị thật đang được tiếp tục phát triển.
 
 ---
 
-## Overview
+## Mục lục
 
-The purpose of BioSignalMonitor is to provide a reliable Android interface for real-time biomedical signal monitoring.
-
-The application is designed around several core responsibilities:
-
-1. Receive raw data from a communication source.
-2. Assemble fragmented data into complete packets.
-3. Validate and parse packet contents.
-4. Store incoming samples in bounded buffers.
-5. Update the application state through a ViewModel.
-6. Render ECG, PPG, and PCG waveforms on the Android UI.
-7. Detect malformed packets, missing blocks, and sequence discontinuities.
-
-The design separates packet transport, protocol parsing, signal storage, and UI rendering so that each component can be tested and maintained independently.
-
----
-
-## Project Status
-
-**Current phase:** Android data pipeline prototype
-
-### Available
-
-- Android project initialized with Kotlin.
-- Jetpack Compose user interface.
-- Biomedical packet data model.
-- Packet assembler.
-- Packet parser.
-- Ring buffer implementation.
-- Fake BLE/data source for development and testing.
-- Custom waveform drawing component.
-- Initial state-management layer.
-
-### In progress
-
-- Android BLE scanning and connection.
-- GATT service and characteristic discovery.
-- Notification-based packet reception.
-- Automatic BLE reconnection.
-- Continuous rendering of synchronized ECG, PPG, and PCG signals.
-- Packet-loss and sequence-gap monitoring.
-
-### Not yet completed
-
-- End-to-end BLE integration with the physical embedded device.
-- Long-duration stability testing.
-- CSV recording and export.
-- Medical-grade signal validation.
-- Production release configuration.
+- [Giới thiệu](#giới-thiệu)
+- [Trạng thái dự án](#trạng-thái-dự-án)
+- [Bối cảnh hệ thống](#bối-cảnh-hệ-thống)
+- [Kiến trúc ứng dụng](#kiến-trúc-ứng-dụng)
+- [Luồng dữ liệu](#luồng-dữ-liệu)
+- [Chức năng đã thực hiện](#chức-năng-đã-thực-hiện)
+- [Chức năng dự kiến](#chức-năng-dự-kiến)
+- [Cấu trúc thư mục](#cấu-trúc-thư-mục)
+- [Công nghệ sử dụng](#công-nghệ-sử-dụng)
+- [Cài đặt dự án](#cài-đặt-dự-án)
+- [Build và chạy ứng dụng](#build-và-chạy-ứng-dụng)
+- [Kiểm thử](#kiểm-thử)
+- [Xử lý packet](#xử-lý-packet)
+- [Các vấn đề kỹ thuật quan trọng](#các-vấn-đề-kỹ-thuật-quan-trọng)
+- [Quy trình Git](#quy-trình-git)
+- [Bảo mật và quyền riêng tư](#bảo-mật-và-quyền-riêng-tư)
+- [Hạn chế hiện tại](#hạn-chế-hiện-tại)
+- [Lộ trình phát triển](#lộ-trình-phát-triển)
+- [Đóng góp](#đóng-góp)
+- [Tác giả](#tác-giả)
+- [Giấy phép](#giấy-phép)
 
 ---
 
-## System Context
+## Giới thiệu
 
-BioSignalMonitor is intended to communicate with an embedded acquisition system containing:
+Mục tiêu của BioSignalMonitor là xây dựng một ứng dụng Android có khả năng giám sát tín hiệu y sinh theo thời gian thực một cách ổn định, dễ mở rộng và dễ kiểm thử.
+
+Ứng dụng được thiết kế để thực hiện các nhiệm vụ chính:
+
+1. Nhận dữ liệu thô từ nguồn truyền thông.
+2. Ghép các mảnh dữ liệu thành packet hoàn chỉnh.
+3. Kiểm tra và phân tích nội dung packet.
+4. Lưu mẫu tín hiệu vào bộ đệm có giới hạn.
+5. Cập nhật trạng thái ứng dụng thông qua ViewModel.
+6. Hiển thị waveform ECG, PPG và PCG.
+7. Phát hiện packet lỗi, mất block hoặc gián đoạn sequence.
+
+Việc tách riêng tầng truyền dữ liệu, tầng giao thức, tầng lưu trữ và tầng giao diện giúp hệ thống dễ bảo trì, dễ kiểm thử và dễ thay thế nguồn dữ liệu giả bằng BLE thật.
+
+---
+
+## Trạng thái dự án
+
+**Giai đoạn hiện tại:** Xây dựng nguyên mẫu luồng xử lý dữ liệu Android.
+
+### Đã có
+
+- Project Android sử dụng Kotlin.
+- Giao diện Jetpack Compose.
+- Mô hình dữ liệu `BioPacket`.
+- Bộ ghép packet `PacketAssembler`.
+- Bộ phân tích packet `PacketParser`.
+- Ring buffer để lưu tín hiệu.
+- Nguồn dữ liệu giả phục vụ kiểm thử.
+- Thành phần vẽ waveform tùy chỉnh.
+- Tầng quản lý trạng thái ban đầu.
+
+### Đang thực hiện
+
+- Quét thiết bị BLE.
+- Kết nối GATT.
+- Khám phá service và characteristic.
+- Nhận notification từ BLE.
+- Tự động kết nối lại khi mất kết nối.
+- Hiển thị liên tục ba tín hiệu ECG, PPG và PCG.
+- Phát hiện mất packet và gián đoạn sequence.
+
+### Chưa hoàn thành
+
+- Tích hợp BLE hoàn chỉnh với thiết bị nhúng thật.
+- Kiểm thử chạy dài hạn.
+- Ghi và xuất dữ liệu CSV.
+- Xác thực tín hiệu theo tiêu chuẩn y tế.
+- Cấu hình bản phát hành production.
+
+---
+
+## Bối cảnh hệ thống
+
+BioSignalMonitor được thiết kế để làm việc với hệ thống thu thập tín hiệu gồm:
 
 - **STM32F401**
-- **AD8232** for ECG acquisition
-- **MAX30102** for PPG acquisition
-- **INMP441** for PCG acquisition
+- **AD8232** dùng cho ECG
+- **MAX30102** dùng cho PPG
+- **INMP441** dùng cho PCG
 - **FreeRTOS / CMSIS-OS**
-- DMA-based acquisition
-- Timer-based synchronization
-- Block-based signal transfer
+- Thu thập dữ liệu bằng DMA
+- Đồng bộ bằng Timer
+- Truyền dữ liệu theo block
 
-The embedded system groups samples into synchronized blocks. Each synchronized block is expected to contain corresponding ECG, PPG, and PCG data associated with the same sequence identifier and timestamp.
+Thiết bị nhúng gom mẫu thành các block đồng bộ. Mỗi block dự kiến chứa dữ liệu ECG, PPG và PCG có cùng mã sequence và timestamp.
 
 ```mermaid
 flowchart LR
@@ -117,29 +118,29 @@ flowchart LR
     PPG[MAX30102\nPPG] --> STM32
     PCG[INMP441\nPCG] --> STM32
 
-    STM32 --> SYNC[Block synchronization\nID + timestamp + samples]
-    SYNC --> LINK[Wireless transport\nBLE]
+    STM32 --> SYNC[Đồng bộ block\nID + timestamp + samples]
+    SYNC --> LINK[Kết nối không dây\nBLE]
     LINK --> APP[BioSignalMonitor\nAndroid]
-    APP --> PARSER[Packet assembler\nand parser]
-    PARSER --> BUFFER[Signal ring buffers]
-    BUFFER --> UI[Real-time waveform UI]
+    APP --> PARSER[Ghép và phân tích packet]
+    PARSER --> BUFFER[Ring buffer tín hiệu]
+    BUFFER --> UI[Hiển thị waveform]
 ```
 
 ---
 
-## Application Architecture
+## Kiến trúc ứng dụng
 
-The Android application follows a layered structure:
+Ứng dụng được tổ chức theo các tầng độc lập:
 
 ```mermaid
 flowchart TD
-    SOURCE[Data source\nFake source / BLE source]
+    SOURCE[Nguồn dữ liệu\nFake source / BLE source]
     ASSEMBLER[PacketAssembler]
     PARSER[PacketParser]
     MODEL[BioPacket]
     BUFFER[RingBuffer]
     VM[SignalViewModel]
-    UI[Jetpack Compose UI]
+    UI[Giao diện Jetpack Compose]
     CANVAS[WaveformCanvas]
 
     SOURCE --> ASSEMBLER
@@ -151,31 +152,31 @@ flowchart TD
     UI --> CANVAS
 ```
 
-### Main layers
+### Vai trò của từng tầng
 
-| Layer | Responsibility |
+| Tầng | Chức năng |
 |---|---|
-| Data source | Produces incoming byte streams from a fake source or BLE connection |
-| Packet assembly | Combines fragmented byte chunks into complete frames |
-| Packet parsing | Converts validated frames into structured signal packets |
-| Signal storage | Maintains bounded sample history using ring buffers |
-| State management | Exposes signal state to the UI |
-| Presentation | Draws waveforms and displays connection or packet status |
+| Nguồn dữ liệu | Tạo hoặc tiếp nhận luồng byte từ dữ liệu giả hoặc BLE |
+| Ghép packet | Ghép nhiều đoạn byte thành một frame hoàn chỉnh |
+| Phân tích packet | Kiểm tra và chuyển frame thành dữ liệu tín hiệu |
+| Lưu tín hiệu | Lưu lịch sử mẫu trong ring buffer có giới hạn |
+| Quản lý trạng thái | Cung cấp dữ liệu và trạng thái cho giao diện |
+| Hiển thị | Vẽ waveform và hiển thị trạng thái kết nối hoặc packet |
 
-This separation reduces coupling and makes it easier to replace the fake data source with a real BLE implementation later.
+Kiến trúc này giúp giảm phụ thuộc giữa các thành phần và cho phép phát triển BLE thật mà không phải sửa toàn bộ phần giao diện.
 
 ---
 
-## Data Flow
+## Luồng dữ liệu
 
-A typical data block follows this path:
+Một block dữ liệu đi qua các bước sau:
 
 ```text
-Embedded sensors
+Cảm biến y sinh
     ↓
-STM32 synchronized block
+STM32 tạo block đồng bộ
     ↓
-BLE packet or packet fragment
+BLE packet hoặc mảnh packet
     ↓
 PacketAssembler
     ↓
@@ -183,82 +184,83 @@ PacketParser
     ↓
 BioPacket
     ↓
-ECG / PPG / PCG ring buffers
+Ring buffer ECG / PPG / PCG
     ↓
 SignalViewModel
     ↓
 WaveformCanvas
 ```
 
-The intended packet-level checks include:
+Các kiểm tra dự kiến ở tầng packet:
 
-- Frame completeness
-- Expected packet size
-- Supported packet type or format
-- Valid sample count
-- Sequence continuity
-- Timestamp progression
-- Protection against malformed or truncated data
-
----
-
-## Implemented Features
-
-### Protocol and data handling
-
-- Structured `BioPacket` data model
-- Packet assembly from partial byte streams
-- Packet parsing into signal arrays
-- Separation between transport logic and protocol logic
-- Test data generation through `FakeBleSource`
-
-### Signal processing infrastructure
-
-- Fixed-capacity ring buffer
-- Continuous insertion of incoming samples
-- Controlled memory usage
-- Foundation for multi-channel synchronized buffering
-
-### User interface
-
-- Jetpack Compose-based application
-- Custom waveform rendering with `WaveformCanvas`
-- Theme support
-- Architecture prepared for real-time updates
-
-### Testing foundation
-
-- Unit-test source set
-- Instrumented-test source set
-- Fake input source for deterministic protocol testing
+- Packet đã đủ dữ liệu hay chưa
+- Kích thước packet có đúng hay không
+- Loại packet có được hỗ trợ hay không
+- Số lượng mẫu có hợp lệ hay không
+- Sequence có liên tục hay không
+- Timestamp có tăng hợp lệ hay không
+- Dữ liệu có bị thiếu hoặc hỏng hay không
 
 ---
 
-## Planned Features
+## Chức năng đã thực hiện
 
-- BLE permission handling for supported Android versions
-- BLE scanning and device filtering
-- GATT connection management
-- Service and characteristic discovery
-- Characteristic notification subscription
-- MTU negotiation
-- Packet fragmentation and reassembly over BLE
-- Sequence-gap detection
-- Packet-loss statistics
-- Automatic reconnect with retry and timeout policy
-- ECG, PPG, and PCG display controls
-- Pause, resume, and clear actions
-- Adjustable waveform scale
-- Recording session management
-- CSV export
-- Session metadata
-- Long-duration memory and performance tests
-- Background operation strategy
-- Error and diagnostic logging
+### Xử lý dữ liệu và giao thức
+
+- Mô hình dữ liệu `BioPacket`
+- Ghép packet từ nhiều mảnh byte
+- Phân tích packet thành các mảng tín hiệu
+- Tách riêng tầng truyền thông và tầng giao thức
+- Tạo dữ liệu kiểm thử thông qua `FakeBleSource`
+
+### Hạ tầng xử lý tín hiệu
+
+- Ring buffer có dung lượng cố định
+- Chèn mẫu liên tục
+- Kiểm soát bộ nhớ
+- Chuẩn bị nền tảng lưu ba kênh tín hiệu đồng bộ
+
+### Giao diện
+
+- Sử dụng Jetpack Compose
+- Vẽ waveform bằng `WaveformCanvas`
+- Hỗ trợ theme
+- Chuẩn bị kiến trúc cho cập nhật thời gian thực
+
+### Kiểm thử
+
+- Có thư mục unit test
+- Có thư mục instrumented test
+- Có nguồn dữ liệu giả để kiểm thử giao thức độc lập với phần cứng
 
 ---
 
-## Project Structure
+## Chức năng dự kiến
+
+- Xử lý quyền Bluetooth theo từng phiên bản Android
+- Quét thiết bị BLE
+- Lọc thiết bị theo tên hoặc UUID
+- Kết nối GATT
+- Khám phá service và characteristic
+- Đăng ký nhận notification
+- Thương lượng MTU
+- Ghép packet bị chia nhỏ qua BLE
+- Phát hiện mất sequence
+- Thống kê tỷ lệ mất packet
+- Tự động kết nối lại với retry và timeout
+- Điều khiển hiển thị từng tín hiệu
+- Tạm dừng, tiếp tục và xóa biểu đồ
+- Điều chỉnh tỉ lệ waveform
+- Quản lý phiên ghi dữ liệu
+- Xuất CSV
+- Lưu metadata của phiên đo
+- Kiểm thử bộ nhớ và hiệu năng dài hạn
+- Xử lý vòng đời ứng dụng
+- Ghi log lỗi và chẩn đoán
+
+---
+
+## Cấu trúc thư mục
 
 ```text
 BioSignalMonitor/
@@ -301,64 +303,64 @@ BioSignalMonitor/
 
 ---
 
-## Technology Stack
+## Công nghệ sử dụng
 
-| Category | Technology |
+| Hạng mục | Công nghệ |
 |---|---|
-| Language | Kotlin |
-| Platform | Android |
-| UI | Jetpack Compose |
-| Build system | Gradle with Kotlin DSL |
-| State management | Android ViewModel architecture |
-| Graphics | Custom Compose Canvas drawing |
-| Data transport | BLE planned; fake source currently available |
-| Version control | Git and GitHub |
-| Testing | JUnit and Android instrumented tests |
+| Ngôn ngữ | Kotlin |
+| Nền tảng | Android |
+| Giao diện | Jetpack Compose |
+| Build system | Gradle với Kotlin DSL |
+| Quản lý trạng thái | Android ViewModel |
+| Vẽ tín hiệu | Compose Canvas |
+| Truyền dữ liệu | Dự kiến BLE, hiện có nguồn giả |
+| Quản lý mã nguồn | Git và GitHub |
+| Kiểm thử | JUnit và Android Instrumented Test |
 
 ---
 
-## Getting Started
+## Cài đặt dự án
 
-### Prerequisites
+### Yêu cầu
 
-Install the following tools:
+Cần cài đặt:
 
 - Android Studio
 - Android SDK
 - Git
-- JDK supported by the configured Android Gradle Plugin
-- Android device or emulator
+- JDK tương thích với Android Gradle Plugin
+- Thiết bị Android hoặc emulator
 
-For physical BLE testing, an Android device with Bluetooth Low Energy support is required.
+Để kiểm thử BLE thật, thiết bị Android cần hỗ trợ Bluetooth Low Energy.
 
-### Clone the repository
+### Clone repository
 
-Using SSH:
+Bằng SSH:
 
 ```bash
 git clone git@github.com:khanhnguyendang224440/BioSignalMonitor.git
 ```
 
-Or using HTTPS:
+Hoặc bằng HTTPS:
 
 ```bash
 git clone https://github.com/khanhnguyendang224440/BioSignalMonitor.git
 ```
 
-Open the cloned folder in Android Studio.
+Sau đó mở thư mục project bằng Android Studio.
 
-### Gradle synchronization
+### Đồng bộ Gradle
 
-After opening the project:
+Sau khi mở project:
 
-1. Wait for Android Studio to complete Gradle synchronization.
-2. Install any requested SDK components.
-3. Select an emulator or connected Android device.
-4. Build and run the application.
+1. Chờ Android Studio hoàn tất Gradle Sync.
+2. Cài các thành phần SDK được yêu cầu.
+3. Chọn emulator hoặc thiết bị Android.
+4. Build và chạy ứng dụng.
 
 ---
 
-## Build and Run
+## Build và chạy ứng dụng
 
 ### Windows PowerShell
 
@@ -366,30 +368,30 @@ After opening the project:
 .\gradlew.bat assembleDebug
 ```
 
-### macOS or Linux
+### macOS hoặc Linux
 
 ```bash
 ./gradlew assembleDebug
 ```
 
-### Install the debug application
+### Cài bản debug lên thiết bị
 
 ```powershell
 .\gradlew.bat installDebug
 ```
 
-### Run from Android Studio
+### Chạy từ Android Studio
 
-1. Open the project.
-2. Select the `app` run configuration.
-3. Select a target device.
-4. Press **Run**.
+1. Mở project.
+2. Chọn cấu hình chạy `app`.
+3. Chọn thiết bị.
+4. Nhấn **Run**.
 
 ---
 
-## Testing
+## Kiểm thử
 
-### Run local unit tests
+### Chạy unit test
 
 Windows:
 
@@ -397,13 +399,13 @@ Windows:
 .\gradlew.bat test
 ```
 
-macOS or Linux:
+macOS hoặc Linux:
 
 ```bash
 ./gradlew test
 ```
 
-### Run connected Android tests
+### Chạy instrumented test
 
 Windows:
 
@@ -411,149 +413,149 @@ Windows:
 .\gradlew.bat connectedAndroidTest
 ```
 
-macOS or Linux:
+macOS hoặc Linux:
 
 ```bash
 ./gradlew connectedAndroidTest
 ```
 
-### Recommended protocol test cases
+### Các trường hợp nên kiểm thử cho packet
 
-The packet-processing layer should be tested with:
-
-- One complete valid packet
-- A packet split into multiple fragments
-- Multiple packets in one received byte array
-- Invalid header
-- Invalid packet length
-- Incomplete packet
-- Unexpected sample count
-- Duplicate sequence number
-- Missing sequence number
-- Sequence number rollover
-- Timestamp discontinuity
-- Noise bytes before a valid packet
-- Continuous reception over a long period
+- Một packet hoàn chỉnh
+- Một packet bị chia thành nhiều mảnh
+- Nhiều packet trong cùng một mảng byte
+- Header sai
+- Kích thước packet sai
+- Packet chưa đủ
+- Số mẫu không đúng
+- Sequence bị lặp
+- Sequence bị mất
+- Sequence bị tràn
+- Timestamp không liên tục
+- Có byte rác trước packet hợp lệ
+- Nhận dữ liệu liên tục trong thời gian dài
 
 ---
 
-## Packet Processing
+## Xử lý packet
 
-The protocol layer currently contains:
+Tầng giao thức hiện có:
 
-- `BioPacket.kt` — structured representation of a decoded signal block
-- `PacketAssembler.kt` — reconstructs complete frames from incoming chunks
-- `PacketParser.kt` — validates and decodes a complete frame
+- `BioPacket.kt` — mô tả dữ liệu của một block tín hiệu
+- `PacketAssembler.kt` — ghép packet từ các đoạn dữ liệu nhận được
+- `PacketParser.kt` — kiểm tra và phân tích packet hoàn chỉnh
 
-A decoded packet is expected to represent synchronized biomedical samples and associated metadata such as:
+Một packet sau khi phân tích dự kiến chứa:
 
-- Sequence identifier
+- Sequence
 - Timestamp
-- Number of samples
-- ECG samples
-- PPG samples
-- PCG samples
+- Số lượng mẫu
+- Mảng ECG
+- Mảng PPG
+- Mảng PCG
 
-The exact byte-level frame specification should remain synchronized with the firmware implementation.
+Định dạng byte của packet Android phải luôn đồng bộ với firmware.
 
-When the embedded packet format changes, update all of the following together:
+Khi thay đổi định dạng packet, cần sửa đồng thời:
 
-1. STM32 or bridge-device packet serializer
-2. Android `PacketParser`
-3. Packet-size validation
-4. Unit tests
-5. Protocol documentation
+1. Phần đóng gói packet phía STM32 hoặc ESP32
+2. `PacketParser` phía Android
+3. Kiểm tra kích thước packet
+4. Unit test
+5. Tài liệu giao thức
 
-### Recommended protocol documentation format
+### Mẫu tài liệu giao thức
 
-| Field | Size | Type | Description |
+| Trường | Kích thước | Kiểu dữ liệu | Ý nghĩa |
 |---|---:|---|---|
-| Header | Project-defined | Unsigned | Frame start marker |
-| Sequence | Project-defined | Unsigned | Monotonic block identifier |
-| Timestamp | Project-defined | Unsigned | Acquisition timestamp |
-| Sample count | Project-defined | Unsigned | Samples per signal block |
-| ECG payload | Project-defined | Signed samples | ECG block |
-| PPG payload | Project-defined | Unsigned or signed samples | PPG block |
-| PCG payload | Project-defined | Signed samples | PCG block |
-| Integrity field | Optional | CRC/checksum | Transmission validation |
+| Header | Theo thiết kế | Unsigned | Đánh dấu bắt đầu frame |
+| Sequence | Theo thiết kế | Unsigned | ID block tăng dần |
+| Timestamp | Theo thiết kế | Unsigned | Thời điểm thu mẫu |
+| Sample count | Theo thiết kế | Unsigned | Số mẫu trong block |
+| ECG payload | Theo thiết kế | Signed samples | Dữ liệu ECG |
+| PPG payload | Theo thiết kế | Unsigned hoặc signed | Dữ liệu PPG |
+| PCG payload | Theo thiết kế | Signed samples | Dữ liệu PCG |
+| CRC/checksum | Tùy chọn | Unsigned | Kiểm tra toàn vẹn dữ liệu |
 
-> Replace the project-defined sizes with the final firmware protocol specification once the BLE frame format is frozen.
+> Kích thước cụ thể cần được cập nhật sau khi định dạng packet cuối cùng giữa firmware và Android được chốt.
 
 ---
 
-## Engineering Considerations
+## Các vấn đề kỹ thuật quan trọng
 
-### Bounded memory usage
+### Quản lý bộ nhớ
 
-Biomedical monitoring can run continuously for long periods. Unbounded lists may continuously grow and eventually cause excessive memory usage.
+Ứng dụng giám sát y sinh có thể chạy liên tục trong thời gian dài. Nếu dùng danh sách không giới hạn, dữ liệu sẽ tăng dần và có thể làm ứng dụng hết bộ nhớ.
 
-The project uses a fixed-capacity ring buffer so that:
+Ring buffer giúp:
 
-- Memory usage remains predictable.
-- Old samples can be overwritten safely.
-- The waveform can display a fixed time window.
-- Long-running monitoring is less likely to fail because of memory growth.
+- Bộ nhớ luôn có giới hạn
+- Tự động ghi đè mẫu cũ
+- Hiển thị một cửa sổ thời gian cố định
+- Tăng độ ổn định khi chạy lâu
 
 ### Packet fragmentation
 
-BLE notifications may not always align with one complete application packet. A complete frame may arrive through:
+BLE notification không đảm bảo một notification tương ứng với đúng một packet ứng dụng.
 
-- One notification
-- Several notifications
-- A notification containing the end of one frame and the beginning of another
+Một packet có thể:
 
-For that reason, packet assembly is handled separately from packet parsing.
+- Nằm trọn trong một notification
+- Bị chia thành nhiều notification
+- Chung notification với một phần của packet tiếp theo
 
-### UI performance
+Vì vậy cần tách riêng `PacketAssembler` và `PacketParser`.
 
-The waveform layer should avoid unnecessary recomposition and allocation.
+### Hiệu năng giao diện
 
-Recommended practices include:
+Waveform thời gian thực cần hạn chế cấp phát bộ nhớ và recomposition không cần thiết.
 
-- Keep signal buffers bounded.
-- Avoid copying large arrays on every sample.
-- Update the UI in batches rather than for every individual sample.
-- Separate acquisition frequency from display refresh rate.
-- Use background coroutines for packet handling.
-- Keep BLE callbacks short and non-blocking.
+Một số nguyên tắc:
 
-### Synchronization
+- Dùng buffer có giới hạn
+- Không copy mảng lớn ở mỗi sample
+- Cập nhật UI theo batch
+- Tách tần số lấy mẫu và tần số vẽ
+- Xử lý packet trên coroutine nền
+- Callback BLE phải ngắn và không blocking
 
-The Android application should not assume that signals are synchronized merely because they arrive together.
+### Đồng bộ tín hiệu
 
-Synchronization should be verified through packet metadata:
+Ứng dụng không nên mặc định ba tín hiệu đồng bộ chỉ vì chúng xuất hiện trong cùng packet.
 
-- Same block sequence
-- Same timestamp
-- Expected sample count
-- Valid ordering
-- No missing blocks
+Cần kiểm tra:
 
-### Error handling
+- Cùng sequence
+- Cùng timestamp
+- Đủ số mẫu
+- Đúng thứ tự
+- Không mất block
 
-Production behavior should account for:
+### Xử lý lỗi
 
-- Bluetooth disabled
-- Missing permissions
-- Device out of range
-- GATT connection failure
-- Service discovery failure
-- Notification setup failure
-- Invalid packet
+Hệ thống thực tế cần xử lý:
+
+- Bluetooth bị tắt
+- Thiếu quyền truy cập
+- Thiết bị ngoài phạm vi
+- Kết nối GATT thất bại
+- Khám phá service thất bại
+- Bật notification thất bại
+- Packet sai
 - Packet timeout
-- Sequence gap
-- Unexpected disconnection
-- Reconnection exhaustion
+- Mất sequence
+- Mất kết nối bất ngờ
+- Kết nối lại thất bại nhiều lần
 
 ---
 
-## Git Workflow
+## Quy trình Git
 
-The project uses `main` as the stable branch.
+Nhánh `main` được dùng làm nhánh ổn định.
 
-New work should be developed on dedicated branches.
+Mỗi chức năng mới nên được phát triển trên branch riêng.
 
-### Branch naming
+### Quy tắc đặt tên branch
 
 ```text
 feature/ble-scanning
@@ -567,14 +569,14 @@ test/packet-parser
 docs/update-readme
 ```
 
-### Typical workflow
+### Quy trình làm việc
 
 ```bash
 git switch main
 git pull origin main
 git switch -c feature/ble-scanning
 
-# Make changes
+# Thực hiện thay đổi
 
 git status
 git add .
@@ -582,23 +584,23 @@ git commit -m "feat: implement BLE device scanning"
 git push -u origin feature/ble-scanning
 ```
 
-Create a pull request from the feature branch into `main`, review the changes, and merge only after the project builds successfully.
+Sau đó tạo Pull Request từ branch chức năng vào `main`, kiểm tra code và chỉ merge khi project build thành công.
 
-### Commit convention
+### Quy tắc commit
 
-This project follows a Conventional Commits-style format:
+Dự án sử dụng cách đặt commit gần với Conventional Commits:
 
 ```text
-feat: add a new feature
-fix: correct a defect
-refactor: restructure code without changing behavior
-test: add or update tests
-docs: update documentation
-chore: update tooling or project configuration
-perf: improve performance
+feat: thêm chức năng mới
+fix: sửa lỗi
+refactor: tái cấu trúc code nhưng không đổi chức năng
+test: thêm hoặc sửa kiểm thử
+docs: cập nhật tài liệu
+chore: thay đổi cấu hình hoặc công cụ
+perf: cải thiện hiệu năng
 ```
 
-Examples:
+Ví dụ:
 
 ```text
 feat: add BLE packet notification handler
@@ -610,23 +612,23 @@ docs: document synchronized signal packet format
 
 ---
 
-## Security and Privacy
+## Bảo mật và quyền riêng tư
 
-Biomedical signals may be sensitive personal data.
+Tín hiệu y sinh có thể là dữ liệu cá nhân nhạy cảm.
 
-Before using this application with real users:
+Trước khi dùng ứng dụng với người thật:
 
-- Do not commit API keys, passwords, certificates, or signing keys.
-- Do not store personal health data without explicit consent.
-- Avoid writing raw biomedical data to public logs.
-- Use secure transport where applicable.
-- Define a data-retention policy.
-- Protect exported files.
-- Review Android backup behavior.
-- Review device permissions.
-- Follow applicable privacy and medical-data regulations.
+- Không commit API key, mật khẩu, certificate hoặc signing key
+- Không lưu dữ liệu sức khỏe nếu chưa có sự đồng ý
+- Không ghi dữ liệu y sinh thô vào log công khai
+- Sử dụng truyền dữ liệu an toàn khi cần
+- Xác định chính sách lưu trữ và xóa dữ liệu
+- Bảo vệ file xuất ra
+- Kiểm tra cơ chế Android Backup
+- Chỉ yêu cầu quyền cần thiết
+- Tuân thủ quy định về quyền riêng tư và dữ liệu y tế
 
-Files such as the following must not be committed:
+Các file sau không được commit:
 
 ```text
 local.properties
@@ -638,117 +640,103 @@ local.properties
 secrets.properties
 ```
 
-This project is intended for engineering development and academic research. It is **not a certified medical device** and must not be used as the sole basis for diagnosis or treatment.
+Dự án phục vụ học tập, nghiên cứu và phát triển kỹ thuật. Đây **không phải thiết bị y tế đã được chứng nhận** và không được sử dụng làm căn cứ duy nhất cho chẩn đoán hoặc điều trị.
 
 ---
 
-## Known Limitations
+## Hạn chế hiện tại
 
-- BLE hardware integration is not yet complete.
-- Current development relies partly on a fake data source.
-- Packet protocol documentation is not yet frozen.
-- Signal rendering has not yet been validated for long-duration sessions.
-- No persistent recording workflow is currently available.
-- No clinical validation has been performed.
-- No release build or distribution workflow has been configured.
-
----
-
-## Roadmap
-
-### Phase 1 — Protocol pipeline
-
-- [x] Create packet data model
-- [x] Implement packet assembler
-- [x] Implement packet parser
-- [x] Implement bounded ring buffer
-- [x] Add fake data source
-- [x] Add initial waveform component
-
-### Phase 2 — BLE integration
-
-- [ ] Add runtime Bluetooth permissions
-- [ ] Scan for target device
-- [ ] Filter by device name or service UUID
-- [ ] Connect to GATT server
-- [ ] Discover services and characteristics
-- [ ] Enable notifications
-- [ ] Receive fragmented packets
-- [ ] Add automatic reconnect
-
-### Phase 3 — Real-time monitoring
-
-- [ ] Display ECG waveform
-- [ ] Display PPG waveform
-- [ ] Display PCG waveform
-- [ ] Show connection state
-- [ ] Show packet rate
-- [ ] Show sequence gaps
-- [ ] Add pause and clear controls
-
-### Phase 4 — Recording and analysis
-
-- [ ] Start and stop recording sessions
-- [ ] Export CSV
-- [ ] Save session metadata
-- [ ] Add basic filtering options
-- [ ] Add signal-quality indicators
-- [ ] Validate sample continuity
-
-### Phase 5 — Reliability
-
-- [ ] Long-duration test
-- [ ] Memory profiling
-- [ ] CPU profiling
-- [ ] Reconnection stress test
-- [ ] Invalid-packet fuzz testing
-- [ ] Background and lifecycle testing
-- [ ] Release build configuration
+- BLE với phần cứng thật chưa hoàn thành
+- Hiện vẫn dùng một phần nguồn dữ liệu giả
+- Định dạng packet chưa được chốt chính thức
+- Chưa kiểm thử waveform trong thời gian dài
+- Chưa có chức năng ghi dữ liệu hoàn chỉnh
+- Chưa có xác thực lâm sàng
+- Chưa có quy trình phát hành ứng dụng
 
 ---
 
-## Contributing
+## Lộ trình phát triển
 
-This repository is currently maintained as an academic and engineering project.
+### Giai đoạn 1 — Luồng xử lý giao thức
 
-For proposed changes:
+- [x] Tạo mô hình dữ liệu packet
+- [x] Tạo PacketAssembler
+- [x] Tạo PacketParser
+- [x] Tạo ring buffer
+- [x] Tạo nguồn dữ liệu giả
+- [x] Tạo thành phần waveform ban đầu
 
-1. Create a dedicated branch.
-2. Keep each commit focused.
-3. Add tests for protocol changes.
-4. Update documentation when behavior changes.
-5. Confirm that the project builds before opening a pull request.
-6. Do not commit local configuration or sensitive information.
+### Giai đoạn 2 — Tích hợp BLE
+
+- [ ] Thêm quyền Bluetooth
+- [ ] Quét thiết bị
+- [ ] Lọc thiết bị theo tên hoặc UUID
+- [ ] Kết nối GATT
+- [ ] Khám phá service và characteristic
+- [ ] Bật notification
+- [ ] Nhận packet bị phân mảnh
+- [ ] Tự động kết nối lại
+
+### Giai đoạn 3 — Giám sát thời gian thực
+
+- [ ] Hiển thị ECG
+- [ ] Hiển thị PPG
+- [ ] Hiển thị PCG
+- [ ] Hiển thị trạng thái kết nối
+- [ ] Hiển thị tốc độ packet
+- [ ] Hiển thị số sequence bị mất
+- [ ] Thêm nút pause và clear
+
+### Giai đoạn 4 — Ghi và phân tích dữ liệu
+
+- [ ] Bắt đầu và dừng phiên ghi
+- [ ] Xuất CSV
+- [ ] Lưu metadata
+- [ ] Thêm bộ lọc cơ bản
+- [ ] Hiển thị chất lượng tín hiệu
+- [ ] Kiểm tra tính liên tục của mẫu
+
+### Giai đoạn 5 — Độ ổn định
+
+- [ ] Kiểm thử chạy dài hạn
+- [ ] Kiểm tra bộ nhớ
+- [ ] Kiểm tra CPU
+- [ ] Stress test kết nối lại
+- [ ] Kiểm thử packet lỗi
+- [ ] Kiểm thử vòng đời ứng dụng
+- [ ] Cấu hình release build
 
 ---
 
-## Author
+## Đóng góp
+
+Repository hiện được duy trì phục vụ đồ án và phát triển kỹ thuật.
+
+Khi đóng góp thay đổi:
+
+1. Tạo branch riêng.
+2. Mỗi commit chỉ nên chứa một nhóm thay đổi rõ ràng.
+3. Thêm test khi thay đổi giao thức.
+4. Cập nhật tài liệu khi thay đổi hành vi.
+5. Kiểm tra build trước khi tạo Pull Request.
+6. Không commit file cấu hình cá nhân hoặc dữ liệu nhạy cảm.
+
+---
+
+## Tác giả
 
 **Nguyễn Đăng Khánh**
 
 - GitHub: [@khanhnguyendang224440](https://github.com/khanhnguyendang224440)
-- Focus: Embedded Systems, IoT, Android, BLE, and biomedical signal acquisition
+- Lĩnh vực quan tâm: Embedded Systems, IoT, Android, BLE và thu thập tín hiệu y sinh
 
 ---
 
-## License
+## Giấy phép
 
-No license has been selected yet.
+Dự án hiện chưa chọn giấy phép mã nguồn.
 
-Until a license is added, the source code remains under the default copyright restrictions. Others may view the repository, but reuse, modification, and redistribution are not automatically granted.
+Khi chưa có license, mã nguồn vẫn thuộc quyền sở hữu mặc định của tác giả. Người khác có thể xem repository nhưng không mặc nhiên được phép sao chép, sửa đổi hoặc phân phối lại.
 
-A license such as MIT, Apache-2.0, or another suitable license can be added later depending on the intended use of the project.
-
----
-
-## Vietnamese Summary
-
-BioSignalMonitor là ứng dụng Android dùng để tiếp nhận, phân tích, lưu đệm và hiển thị ba tín hiệu y sinh đồng bộ:
-
-- ECG — điện tâm đồ
-- PPG — quang thể tích ký
-- PCG — âm tim
-
-Ứng dụng là một phần của hệ thống thu thập tín hiệu dùng STM32, FreeRTOS và các cảm biến AD8232, MAX30102, INMP441.
-
-Hiện tại repository đã có nền tảng xử lý packet, ring buffer, nguồn dữ liệu giả và giao diện vẽ waveform. Phần BLE thật, ghi dữ liệu và kiểm thử dài hạn đang tiếp tục được phát triển.
+Có thể bổ sung MIT, Apache-2.0 hoặc giấy phép phù hợp khác sau khi xác định mục đích sử dụng của dự án.
