@@ -5,7 +5,7 @@
 [![Jetpack Compose](https://img.shields.io/badge/Giao_diện-Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/compose)
 [![Trạng thái](https://img.shields.io/badge/Trạng_thái-Đang_phát_triển-orange)](#trạng-thái-dự-án)
 
-**BioSignalMonitor** là ứng dụng Android dùng để tiếp nhận, phân tích, lưu đệm và hiển thị theo thời gian thực ba loại tín hiệu y sinh đồng bộ:
+**BioSignalMonitor** là ứng dụng Android mã nguồn mở dùng để tiếp nhận, hiển thị và giám sát các tín hiệu sinh học ECG, PPG và PCG được đồng bộ từ hệ thống nhúng STM32.
 
 - **ECG** — Điện tâm đồ
 - **PPG** — Quang thể tích ký
@@ -441,3 +441,13 @@ Hệ thống thực tế cần xử lý:
 
 - GitHub: [@khanhnguyendang224440](https://github.com/khanhnguyendang224440)
 - Lĩnh vực quan tâm: Embedded Systems, IoT, Android, BLE và thu thập tín hiệu y sinh
+
+---
+
+## License
+
+Dự án này là mã nguồn mở và được phát hành theo giấy phép MIT License.
+
+Người dùng có thể sử dụng, chỉnh sửa, phân phối và công bố lại phần mềm này, miễn là giữ lại thông tin bản quyền và nội dung giấy phép gốc.
+
+Xem chi tiết tại file [LICENSE](LICENSE).
