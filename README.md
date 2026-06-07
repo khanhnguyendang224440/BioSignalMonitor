@@ -11,9 +11,15 @@
 - **PPG** — Quang thể tích ký
 - **PCG** — Âm tâm đồ
 
-Ứng dụng là một phần của hệ thống giám sát tín hiệu y sinh, trong đó thiết bị nhúng sử dụng STM32 để thu thập đồng bộ ECG, PPG và PCG, sau đó truyền dữ liệu đến điện thoại Android qua kết nối không dây.
+Ứng dụng là một phần của hệ thống giám sát tín hiệu y sinh gồm STM32, ESP32 và thiết bị Android.
 
-> Repository hiện tập trung vào phía Android, bao gồm xử lý dữ liệu đầu vào, ghép packet, phân tích packet, lưu mẫu bằng ring buffer và hiển thị waveform. Phần kết nối BLE với thiết bị thật đang được tiếp tục phát triển.
+Trong hệ thống:
+
+- **STM32F401** thu thập và đồng bộ dữ liệu ECG, PPG và PCG.
+- **ESP32** nhận block dữ liệu từ STM32, đóng gói thành packet binary và truyền dữ liệu qua Bluetooth Low Energy.
+- **Ứng dụng Android** nhận dữ liệu BLE, ghép packet, phân tích dữ liệu và hiển thị waveform.
+
+> Repository hiện tập trung vào phía Android, bao gồm nhận dữ liệu binary, ghép packet, phân tích packet, lưu mẫu bằng ring buffer và hiển thị waveform. Phần kết nối BLE với ESP32 thật đang được tiếp tục phát triển.
 
 ---
 
@@ -23,19 +29,23 @@ Mục tiêu của BioSignalMonitor là xây dựng một ứng dụng Android c�
 
 Ứng dụng được thiết kế để thực hiện các nhiệm vụ chính:
 
-1. Nhận dữ liệu thô từ nguồn truyền thông.
-2. Ghép các mảnh dữ liệu thành packet hoàn chỉnh.
-3. Kiểm tra và phân tích nội dung packet.
-4. Lưu mẫu tín hiệu vào bộ đệm có giới hạn.
-5. Cập nhật trạng thái ứng dụng thông qua ViewModel.
-6. Hiển thị waveform ECG, PPG và PCG.
-7. Phát hiện packet lỗi, mất block hoặc gián đoạn sequence.
+1. Kết nối với ESP32 thông qua Bluetooth Low Energy.
+2. Nhận các mảnh dữ liệu binary từ BLE notification.
+3. Ghép các mảnh dữ liệu thành packet hoàn chỉnh.
+4. Kiểm tra và phân tích nội dung packet.
+5. Chuyển packet thành dữ liệu ECG, PPG và PCG.
+6. Lưu mẫu tín hiệu vào bộ đệm có giới hạn.
+7. Cập nhật trạng thái ứng dụng thông qua ViewModel.
+8. Hiển thị waveform ECG, PPG và PCG.
+9. Phát hiện packet lỗi, mất block hoặc gián đoạn sequence.
 
-Việc tách riêng tầng truyền dữ liệu, tầng giao thức, tầng lưu trữ và tầng giao diện giúp hệ thống dễ bảo trì, dễ kiểm thử và dễ thay thế nguồn dữ liệu giả bằng BLE thật.
+Việc tách riêng tầng truyền dữ liệu, tầng giao thức, tầng lưu trữ và tầng giao diện giúp hệ thống dễ bảo trì, dễ kiểm thử và dễ thay thế nguồn dữ liệu giả bằng kết nối BLE thật.
 
 ---
 
 ## Trạng thái dự án
+
+Các thành phần hiện đã được xây dựng:
 
 - Project Android sử dụng Kotlin.
 - Giao diện Jetpack Compose.
@@ -46,23 +56,93 @@ Việc tách riêng tầng truyền dữ liệu, tầng giao thức, tầng lưu
 - Nguồn dữ liệu giả phục vụ kiểm thử.
 - Thành phần vẽ waveform tùy chỉnh.
 - Tầng quản lý trạng thái ban đầu.
+- Kiểm thử packet binary bằng dữ liệu giả.
+- Kiểm tra khả năng chuyển dữ liệu binary thành `BioPacket`.
+
+Các thành phần đang tiếp tục phát triển:
+
+- Quét thiết bị ESP32 BLE.
+- Kết nối GATT với ESP32.
+- Khám phá service và characteristic.
+- Đăng ký BLE notification.
+- Nhận packet binary thật từ ESP32.
+- Hiển thị liên tục ba tín hiệu ECG, PPG và PCG.
+- Phát hiện mất packet và sequence không liên tục.
+- Tự động kết nối lại khi mất BLE.
 
 ---
 
 ## Bối cảnh hệ thống
 
-BioSignalMonitor được thiết kế để làm việc với hệ thống thu thập tín hiệu gồm:
+BioSignalMonitor được thiết kế để hoạt động trong hệ thống thu thập và giám sát tín hiệu y sinh gồm ba tầng chính:
+
+1. Tầng thu thập và đồng bộ dữ liệu bằng STM32.
+2. Tầng truyền dữ liệu không dây bằng ESP32.
+3. Tầng giám sát và hiển thị bằng ứng dụng Android.
+
+### Tầng thu thập tín hiệu STM32
+
+Hệ thống STM32 gồm:
 
 - **STM32F401**
-- **AD8232** dùng cho ECG
-- **MAX30102** dùng cho PPG
-- **INMP441** dùng cho PCG
+- **AD8232** dùng để thu tín hiệu ECG
+- **MAX30102** dùng để thu tín hiệu PPG
+- **INMP441** dùng để thu tín hiệu PCG
 - **FreeRTOS / CMSIS-OS**
-- Thu thập dữ liệu bằng DMA
-- Đồng bộ bằng Timer
-- Truyền dữ liệu theo block
+- ADC và DMA cho ECG
+- I2C cho PPG
+- I2S và DMA cho PCG
+- Timer dùng để tạo mốc lấy mẫu và đồng bộ
+- Queue, Mail hoặc Semaphore dùng để trao đổi dữ liệu giữa các task
 
-Thiết bị nhúng gom mẫu thành các block đồng bộ. Mỗi block dự kiến chứa dữ liệu ECG, PPG và PCG có cùng mã sequence và timestamp.
+STM32 chịu trách nhiệm:
+
+- Thu thập tín hiệu từ ba cảm biến.
+- Gom dữ liệu thành từng block.
+- Đồng bộ ECG, PPG và PCG.
+- Gán `sequence`, `timestamp` và `sample_count`.
+- Chuyển block dữ liệu đồng bộ sang ESP32.
+
+Mỗi block dữ liệu dự kiến chứa:
+
+- `sequence`
+- `timestamp`
+- `sample_count`
+- Mảng mẫu ECG
+- Mảng mẫu PPG
+- Mảng mẫu PCG
+
+### Tầng truyền dữ liệu ESP32
+
+ESP32 đóng vai trò cầu nối giữa STM32 và ứng dụng Android.
+
+ESP32 chịu trách nhiệm:
+
+- Nhận block tín hiệu đồng bộ từ STM32.
+- Kiểm tra kích thước dữ liệu đầu vào.
+- Đóng gói block thành packet binary.
+- Chia packet thành nhiều phần nếu packet lớn hơn kích thước BLE notification.
+- Truyền packet binary đến Android thông qua BLE.
+- Duy trì trạng thái kết nối với ứng dụng.
+- Có thể bổ sung checksum hoặc CRC để kiểm tra toàn vẹn dữ liệu.
+
+ESP32 không trực tiếp thực hiện việc hiển thị hoặc phân tích waveform. Nhiệm vụ chính của ESP32 là truyền dữ liệu binary từ STM32 đến Android một cách ổn định.
+
+### Tầng ứng dụng Android
+
+Ứng dụng Android chịu trách nhiệm:
+
+- Quét thiết bị ESP32.
+- Kết nối ESP32 qua BLE.
+- Khám phá service và characteristic.
+- Đăng ký nhận BLE notification.
+- Nhận các mảnh dữ liệu binary.
+- Ghép dữ liệu thành packet hoàn chỉnh.
+- Phân tích packet thành `BioPacket`.
+- Đưa dữ liệu vào ring buffer.
+- Cập nhật ViewModel.
+- Hiển thị ECG, PPG và PCG theo thời gian thực.
+- Phát hiện packet lỗi hoặc packet bị mất.
 
 ```mermaid
 flowchart LR
@@ -70,11 +150,14 @@ flowchart LR
     PPG[MAX30102\nPPG] --> STM32
     PCG[INMP441\nPCG] --> STM32
 
-    STM32 --> SYNC[Đồng bộ block\nID + timestamp + samples]
-    SYNC --> LINK[Kết nối không dây\nBLE]
-    LINK --> APP[BioSignalMonitor\nAndroid]
-    APP --> PARSER[Ghép và phân tích packet]
-    PARSER --> BUFFER[Ring buffer tín hiệu]
+    STM32 --> SYNC[Đồng bộ block\nsequence + timestamp + samples]
+    SYNC --> TRANSFER[Truyền block sang ESP32]
+    TRANSFER --> ESP32[ESP32\nĐóng gói packet binary]
+    ESP32 --> BLE[BLE Notification]
+    BLE --> APP[BioSignalMonitor\nAndroid]
+    APP --> ASSEMBLER[PacketAssembler]
+    ASSEMBLER --> PARSER[PacketParser]
+    PARSER --> BUFFER[Ring buffer ECG / PPG / PCG]
     BUFFER --> UI[Hiển thị waveform]
 ```
 
@@ -82,11 +165,12 @@ flowchart LR
 
 ## Kiến trúc ứng dụng
 
-Ứng dụng được tổ chức theo các tầng độc lập:
+Ứng dụng Android được tổ chức theo các tầng độc lập:
 
 ```mermaid
 flowchart TD
     SOURCE[Nguồn dữ liệu\nFake source / BLE source]
+    BLE[BLE Manager]
     ASSEMBLER[PacketAssembler]
     PARSER[PacketParser]
     MODEL[BioPacket]
@@ -95,7 +179,8 @@ flowchart TD
     UI[Giao diện Jetpack Compose]
     CANVAS[WaveformCanvas]
 
-    SOURCE --> ASSEMBLER
+    SOURCE --> BLE
+    BLE --> ASSEMBLER
     ASSEMBLER --> PARSER
     PARSER --> MODEL
     MODEL --> BUFFER
@@ -108,14 +193,16 @@ flowchart TD
 
 | Tầng | Chức năng |
 |---|---|
-| Nguồn dữ liệu | Tạo hoặc tiếp nhận luồng byte từ dữ liệu giả hoặc BLE |
+| Nguồn dữ liệu | Cung cấp dữ liệu giả hoặc dữ liệu nhận từ ESP32 |
+| BLE Manager | Quét, kết nối và nhận notification từ ESP32 |
 | Ghép packet | Ghép nhiều đoạn byte thành một frame hoàn chỉnh |
 | Phân tích packet | Kiểm tra và chuyển frame thành dữ liệu tín hiệu |
+| Mô hình dữ liệu | Lưu nội dung packet dưới dạng `BioPacket` |
 | Lưu tín hiệu | Lưu lịch sử mẫu trong ring buffer có giới hạn |
 | Quản lý trạng thái | Cung cấp dữ liệu và trạng thái cho giao diện |
-| Hiển thị | Vẽ waveform và hiển thị trạng thái kết nối hoặc packet |
+| Hiển thị | Vẽ waveform và hiển thị trạng thái kết nối |
 
-Kiến trúc này giúp giảm phụ thuộc giữa các thành phần và cho phép phát triển BLE thật mà không phải sửa toàn bộ phần giao diện.
+Kiến trúc này giúp giảm phụ thuộc giữa các thành phần. Khi thay nguồn dữ liệu giả bằng BLE thật, phần parser, ring buffer và giao diện có thể tiếp tục được sử dụng mà không cần thay đổi lớn.
 
 ---
 
@@ -124,34 +211,99 @@ Kiến trúc này giúp giảm phụ thuộc giữa các thành phần và cho p
 Một block dữ liệu đi qua các bước sau:
 
 ```text
-Cảm biến y sinh
+AD8232 / MAX30102 / INMP441
+            ↓
+        STM32F401
+  Thu thập và đồng bộ tín hiệu
+            ↓
+   Block dữ liệu đồng bộ
+            ↓
+           ESP32
+   Đóng gói packet binary
+            ↓
+     BLE Notification
+            ↓
+    Ứng dụng Android
+            ↓
+      PacketAssembler
+            ↓
+       PacketParser
+            ↓
+         BioPacket
+            ↓
+Ring buffer ECG / PPG / PCG
+            ↓
+     SignalViewModel
+            ↓
+      WaveformCanvas
+```
+
+### Luồng xử lý phía STM32
+
+```text
+Cảm biến
     ↓
-STM32 tạo block đồng bộ
+ADC / I2C / I2S
     ↓
-BLE packet hoặc mảnh packet
+DMA hoặc FIFO
+    ↓
+Buffer trong RAM
+    ↓
+Task xử lý dữ liệu
+    ↓
+SyncTask
+    ↓
+Block ECG + PPG + PCG đồng bộ
+```
+
+### Luồng xử lý phía ESP32
+
+```text
+Nhận block từ STM32
+    ↓
+Kiểm tra block
+    ↓
+Đóng gói packet binary
+    ↓
+Chia packet theo kích thước BLE nếu cần
+    ↓
+Gửi BLE notification
+```
+
+### Luồng xử lý phía Android
+
+```text
+BLE notification
+    ↓
+ByteArray
     ↓
 PacketAssembler
+    ↓
+Packet hoàn chỉnh
     ↓
 PacketParser
     ↓
 BioPacket
     ↓
-Ring buffer ECG / PPG / PCG
+RingBuffer
     ↓
-SignalViewModel
+ViewModel
     ↓
-WaveformCanvas
+Waveform
 ```
 
 Các kiểm tra dự kiến ở tầng packet:
 
-- Packet đã đủ dữ liệu hay chưa
-- Kích thước packet có đúng hay không
-- Loại packet có được hỗ trợ hay không
-- Số lượng mẫu có hợp lệ hay không
-- Sequence có liên tục hay không
-- Timestamp có tăng hợp lệ hay không
-- Dữ liệu có bị thiếu hoặc hỏng hay không
+- Packet đã đủ dữ liệu hay chưa.
+- Header có hợp lệ hay không.
+- Kích thước packet có đúng hay không.
+- Loại packet có được hỗ trợ hay không.
+- Số lượng mẫu có hợp lệ hay không.
+- Sequence có liên tục hay không.
+- Timestamp có tăng hợp lệ hay không.
+- Dữ liệu có bị thiếu hoặc hỏng hay không.
+- Packet có bị trùng lặp hay không.
+- Thứ tự byte có đúng với firmware hay không.
 
 ---
 
@@ -159,56 +311,67 @@ Các kiểm tra dự kiến ở tầng packet:
 
 ### Xử lý dữ liệu và giao thức
 
-- Mô hình dữ liệu `BioPacket`
-- Ghép packet từ nhiều mảnh byte
-- Phân tích packet thành các mảng tín hiệu
-- Tách riêng tầng truyền thông và tầng giao thức
-- Tạo dữ liệu kiểm thử thông qua `FakeBleSource`
+- Mô hình dữ liệu `BioPacket`.
+- Ghép packet từ nhiều mảnh byte.
+- Phân tích packet thành các mảng tín hiệu.
+- Tách riêng tầng truyền thông và tầng giao thức.
+- Tạo dữ liệu kiểm thử thông qua `FakeBleSource`.
+- Kiểm thử khả năng parse packet binary.
+- Kiểm tra dữ liệu `sequence`, `timestamp` và `sample_count`.
 
 ### Hạ tầng xử lý tín hiệu
 
-- Ring buffer có dung lượng cố định
-- Chèn mẫu liên tục
-- Kiểm soát bộ nhớ
-- Chuẩn bị nền tảng lưu ba kênh tín hiệu đồng bộ
+- Ring buffer có dung lượng cố định.
+- Chèn mẫu liên tục.
+- Kiểm soát bộ nhớ.
+- Chuẩn bị nền tảng lưu ba kênh tín hiệu đồng bộ.
+- Hạn chế tăng bộ nhớ khi ứng dụng chạy lâu.
 
 ### Giao diện
 
-- Sử dụng Jetpack Compose
-- Vẽ waveform bằng `WaveformCanvas`
-- Hỗ trợ theme
-- Chuẩn bị kiến trúc cho cập nhật thời gian thực
+- Sử dụng Jetpack Compose.
+- Vẽ waveform bằng `WaveformCanvas`.
+- Hỗ trợ theme.
+- Chuẩn bị kiến trúc cho cập nhật thời gian thực.
+- Có thể mở rộng để hiển thị riêng từng tín hiệu.
 
 ### Kiểm thử
 
-- Có thư mục unit test
-- Có thư mục instrumented test
-- Có nguồn dữ liệu giả để kiểm thử giao thức độc lập với phần cứng
+- Có thư mục unit test.
+- Có thư mục instrumented test.
+- Có nguồn dữ liệu giả để kiểm thử giao thức độc lập với phần cứng.
+- Có thể kiểm thử parser mà không cần kết nối ESP32 thật.
 
 ---
 
 ## Chức năng dự kiến
 
-- Xử lý quyền Bluetooth theo từng phiên bản Android
-- Quét thiết bị BLE
-- Lọc thiết bị theo tên hoặc UUID
-- Kết nối GATT
-- Khám phá service và characteristic
-- Đăng ký nhận notification
-- Thương lượng MTU
-- Ghép packet bị chia nhỏ qua BLE
-- Phát hiện mất sequence
-- Thống kê tỷ lệ mất packet
-- Tự động kết nối lại với retry và timeout
-- Điều khiển hiển thị từng tín hiệu
-- Tạm dừng, tiếp tục và xóa biểu đồ
-- Điều chỉnh tỉ lệ waveform
-- Quản lý phiên ghi dữ liệu
-- Xuất CSV
-- Lưu metadata của phiên đo
-- Kiểm thử bộ nhớ và hiệu năng dài hạn
-- Xử lý vòng đời ứng dụng
-- Ghi log lỗi và chẩn đoán
+- Xử lý quyền Bluetooth theo từng phiên bản Android.
+- Quét thiết bị BLE.
+- Lọc thiết bị theo tên hoặc service UUID.
+- Kết nối với ESP32.
+- Kết nối GATT.
+- Khám phá service và characteristic.
+- Đăng ký nhận notification.
+- Thương lượng MTU.
+- Ghép packet bị chia nhỏ qua BLE.
+- Phát hiện mất sequence.
+- Thống kê tỷ lệ mất packet.
+- Tự động kết nối lại với retry và timeout.
+- Hiển thị trạng thái ESP32.
+- Hiển thị tốc độ nhận packet.
+- Điều khiển hiển thị từng tín hiệu.
+- Tạm dừng, tiếp tục và xóa biểu đồ.
+- Điều chỉnh tỉ lệ waveform.
+- Quản lý phiên ghi dữ liệu.
+- Xuất dữ liệu CSV.
+- Lưu metadata của phiên đo.
+- Kiểm thử bộ nhớ và hiệu năng dài hạn.
+- Xử lý vòng đời ứng dụng.
+- Ghi log lỗi và chẩn đoán.
+- Kiểm tra CRC hoặc checksum.
+- Theo dõi số lượng packet bị lỗi.
+- Theo dõi số lượng block bị mất.
 
 ---
 
@@ -222,7 +385,10 @@ Các kiểm tra dự kiến ở tầng packet:
 | Build system | Gradle với Kotlin DSL |
 | Quản lý trạng thái | Android ViewModel |
 | Vẽ tín hiệu | Compose Canvas |
-| Truyền dữ liệu | Dự kiến BLE, hiện có nguồn giả |
+| Truyền dữ liệu không dây | Bluetooth Low Energy |
+| Thiết bị BLE | ESP32 |
+| Thiết bị thu thập tín hiệu | STM32F401 |
+| Định dạng truyền | Packet binary |
 | Quản lý mã nguồn | Git và GitHub |
 | Kiểm thử | JUnit và Android Instrumented Test |
 
@@ -234,13 +400,35 @@ Các kiểm tra dự kiến ở tầng packet:
 
 Cần cài đặt:
 
-- Android Studio
-- Android SDK
-- Git
-- JDK tương thích với Android Gradle Plugin
-- Thiết bị Android hoặc emulator
+- Android Studio.
+- Android SDK.
+- Git.
+- JDK tương thích với Android Gradle Plugin.
+- Thiết bị Android hoặc emulator.
 
-Để kiểm thử BLE thật, thiết bị Android cần hỗ trợ Bluetooth Low Energy.
+Để kiểm thử BLE thật, cần:
+
+- Điện thoại Android hỗ trợ Bluetooth Low Energy.
+- ESP32 đã được nạp firmware BLE.
+- ESP32 có khả năng nhận dữ liệu từ STM32.
+- Service UUID và characteristic UUID của ESP32.
+- Quyền Bluetooth và vị trí phù hợp với phiên bản Android.
+
+### Clone repository
+
+Sử dụng SSH:
+
+```bash
+git clone git@github.com:khanhnguyendang224440/BioSignalMonitor.git
+```
+
+Hoặc sử dụng HTTPS:
+
+```bash
+git clone https://github.com/khanhnguyendang224440/BioSignalMonitor.git
+```
+
+Sau đó mở thư mục project bằng Android Studio.
 
 ---
 
@@ -248,19 +436,26 @@ Cần cài đặt:
 
 ### Các trường hợp nên kiểm thử cho packet
 
-- Một packet hoàn chỉnh
-- Một packet bị chia thành nhiều mảnh
-- Nhiều packet trong cùng một mảng byte
-- Header sai
-- Kích thước packet sai
-- Packet chưa đủ
-- Số mẫu không đúng
-- Sequence bị lặp
-- Sequence bị mất
-- Sequence bị tràn
-- Timestamp không liên tục
-- Có byte rác trước packet hợp lệ
-- Nhận dữ liệu liên tục trong thời gian dài
+- Một packet hoàn chỉnh.
+- Một packet bị chia thành nhiều BLE notification.
+- Nhiều packet trong cùng một mảng byte.
+- Một notification chứa cuối packet trước và đầu packet sau.
+- Header sai.
+- Kích thước packet sai.
+- Packet chưa đủ.
+- Số mẫu không đúng.
+- Sequence bị lặp.
+- Sequence bị mất.
+- Sequence bị tràn.
+- Timestamp không liên tục.
+- Có byte rác trước packet hợp lệ.
+- Packet bị thay đổi byte.
+- Packet sai thứ tự byte.
+- ESP32 gửi packet quá nhanh.
+- Android nhận packet không liên tục.
+- Nhận dữ liệu liên tục trong thời gian dài.
+- Mất kết nối BLE giữa chừng.
+- Kết nối lại và tiếp tục nhận dữ liệu.
 
 ---
 
@@ -268,28 +463,54 @@ Cần cài đặt:
 
 Tầng giao thức hiện có:
 
-- `BioPacket.kt` — mô tả dữ liệu của một block tín hiệu
-- `PacketAssembler.kt` — ghép packet từ các đoạn dữ liệu nhận được
-- `PacketParser.kt` — kiểm tra và phân tích packet hoàn chỉnh
+- `BioPacket.kt` — mô tả dữ liệu của một block tín hiệu.
+- `PacketAssembler.kt` — ghép packet từ các đoạn dữ liệu nhận được.
+- `PacketParser.kt` — kiểm tra và phân tích packet hoàn chỉnh.
 
 Một packet sau khi phân tích dự kiến chứa:
 
-- Sequence
-- Timestamp
-- Số lượng mẫu
-- Mảng ECG
-- Mảng PPG
-- Mảng PCG
+- Sequence.
+- Timestamp.
+- Số lượng mẫu.
+- Mảng ECG.
+- Mảng PPG.
+- Mảng PCG.
 
-Định dạng byte của packet Android phải luôn đồng bộ với firmware.
+Định dạng byte của packet Android phải luôn đồng bộ với định dạng packet do ESP32 gửi.
+
+Trong toàn bộ hệ thống:
+
+- STM32 tạo block dữ liệu tín hiệu đồng bộ.
+- ESP32 chuyển block thành packet binary BLE.
+- Android phân tích packet binary thành `BioPacket`.
 
 Khi thay đổi định dạng packet, cần sửa đồng thời:
 
-1. Phần đóng gói packet phía STM32 hoặc ESP32
-2. `PacketParser` phía Android
-3. Kiểm tra kích thước packet
-4. Unit test
-5. Tài liệu giao thức
+1. Cấu trúc block dữ liệu phía STM32.
+2. Phần nhận dữ liệu STM32 phía ESP32.
+3. Phần đóng gói packet binary phía ESP32.
+4. `PacketAssembler` phía Android nếu kích thước hoặc cách phân mảnh thay đổi.
+5. `PacketParser` phía Android.
+6. Kiểm tra kích thước packet.
+7. Unit test.
+8. Tài liệu giao thức.
+
+### Cấu trúc packet dự kiến
+
+| Trường | Ý nghĩa |
+|---|---|
+| Header | Đánh dấu bắt đầu packet |
+| Version | Phiên bản giao thức |
+| Packet type | Loại packet |
+| Sequence | ID block tăng dần |
+| Timestamp | Thời điểm thu hoặc tạo block |
+| Sample count | Số mẫu của mỗi tín hiệu |
+| ECG payload | Mảng mẫu ECG |
+| PPG payload | Mảng mẫu PPG |
+| PCG payload | Mảng mẫu PCG |
+| CRC hoặc checksum | Kiểm tra toàn vẹn packet |
+
+Kích thước cụ thể của từng trường phải được cập nhật theo code firmware ESP32 và `PacketParser`.
 
 ---
 
@@ -301,10 +522,38 @@ Khi thay đổi định dạng packet, cần sửa đồng thời:
 
 Ring buffer giúp:
 
-- Bộ nhớ luôn có giới hạn
-- Tự động ghi đè mẫu cũ
-- Hiển thị một cửa sổ thời gian cố định
-- Tăng độ ổn định khi chạy lâu
+- Bộ nhớ luôn có giới hạn.
+- Tự động ghi đè mẫu cũ.
+- Hiển thị một cửa sổ thời gian cố định.
+- Tăng độ ổn định khi chạy lâu.
+- Hạn chế việc cấp phát bộ nhớ liên tục.
+
+### Phân mảnh packet BLE
+
+BLE notification không đảm bảo mỗi notification chứa đúng một packet hoàn chỉnh.
+
+Một packet binary có thể:
+
+- Nằm trọn trong một notification.
+- Bị chia thành nhiều notification.
+- Có phần đầu nằm trong notification trước.
+- Có phần cuối nằm trong notification sau.
+- Chung notification với một phần của packet tiếp theo.
+
+Do đó, Android cần sử dụng `PacketAssembler` để lưu dữ liệu tạm thời và chỉ gọi `PacketParser` khi đã có đủ một packet hoàn chỉnh.
+
+### MTU và kích thước packet
+
+Kích thước packet binary có thể lớn hơn payload BLE mặc định.
+
+Hệ thống cần:
+
+- Thương lượng MTU nếu cần.
+- Không giả định mỗi BLE notification là một packet.
+- Có cơ chế đánh dấu đầu packet.
+- Có trường độ dài packet.
+- Ghép đúng thứ tự các mảnh packet.
+- Phát hiện fragment bị thiếu.
 
 ### Hiệu năng giao diện
 
@@ -312,12 +561,14 @@ Waveform thời gian thực cần hạn chế cấp phát bộ nhớ và recompo
 
 Một số nguyên tắc:
 
-- Dùng buffer có giới hạn
-- Không copy mảng lớn ở mỗi sample
-- Cập nhật UI theo batch
-- Tách tần số lấy mẫu và tần số vẽ
-- Xử lý packet trên coroutine nền
-- Callback BLE phải ngắn và không blocking
+- Dùng buffer có giới hạn.
+- Không copy mảng lớn ở mỗi sample.
+- Cập nhật UI theo block.
+- Tách tần số lấy mẫu và tần số vẽ.
+- Xử lý packet trên coroutine nền.
+- Callback BLE phải ngắn và không blocking.
+- Không thực hiện thao tác nặng trong callback nhận notification.
+- Chỉ đưa dữ liệu cần thiết lên giao diện.
 
 ### Đồng bộ tín hiệu
 
@@ -325,27 +576,50 @@ Một số nguyên tắc:
 
 Cần kiểm tra:
 
-- Cùng sequence
-- Cùng timestamp
-- Đủ số mẫu
-- Đúng thứ tự
-- Không mất block
+- Cùng sequence.
+- Cùng timestamp.
+- Đủ số mẫu.
+- Đúng thứ tự.
+- Không mất block.
+- Không trùng block.
+- `sample_count` khớp với dữ liệu thực tế.
+
+### Kiểm tra mất packet
+
+Android có thể kiểm tra packet bị mất bằng sequence:
+
+```text
+expectedSequence = previousSequence + 1
+```
+
+Nếu sequence nhận được khác sequence dự kiến, ứng dụng có thể ghi nhận:
+
+- Số packet bị mất.
+- Khoảng sequence bị thiếu.
+- Thời điểm xảy ra mất packet.
+- Tổng tỷ lệ packet loss.
 
 ### Xử lý lỗi
 
 Hệ thống thực tế cần xử lý:
 
-- Bluetooth bị tắt
-- Thiếu quyền truy cập
-- Thiết bị ngoài phạm vi
-- Kết nối GATT thất bại
-- Khám phá service thất bại
-- Bật notification thất bại
-- Packet sai
-- Packet timeout
-- Mất sequence
-- Mất kết nối bất ngờ
-- Kết nối lại thất bại nhiều lần
+- Bluetooth bị tắt.
+- Thiếu quyền truy cập.
+- ESP32 ngoài phạm vi.
+- Không tìm thấy ESP32.
+- Kết nối GATT thất bại.
+- Khám phá service thất bại.
+- Không tìm thấy characteristic.
+- Bật notification thất bại.
+- MTU negotiation thất bại.
+- Packet sai.
+- Packet timeout.
+- Packet thiếu fragment.
+- Mất sequence.
+- Mất kết nối bất ngờ.
+- ESP32 khởi động lại.
+- Kết nối lại thất bại nhiều lần.
+- Dữ liệu STM32 và ESP32 không cùng định dạng.
 
 ---
 
