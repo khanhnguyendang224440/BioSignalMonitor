@@ -39,6 +39,9 @@ import com.example.biosignalmonitor.protocol.PacketParser
 import com.example.biosignalmonitor.signal.SignalRingBuffer
 import com.example.biosignalmonitor.ui.theme.BioSignalMonitorTheme
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 
 private val AppBackground = Color(0xFF0B1220)
 private val CardBackground = Color(0xFF121C2B)
@@ -463,9 +466,15 @@ fun StatisticsDialog(
             Text("System Statistics")
         },
         text = {
+            val scrollState = rememberScrollState()
+
             Column(
-                verticalArrangement =
-                    Arrangement.spacedBy(6.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 320.dp)
+                    .verticalScroll(scrollState)
+                    .padding(end = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text("Mode: Simulation")
                 Text("Sequence: $sequence")
