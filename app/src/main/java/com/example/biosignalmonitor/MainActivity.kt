@@ -258,7 +258,7 @@ fun BioSignalDashboard(
             SignalCard(
                 title = "PCG",
                 subtitle = "Phonocardiogram",
-                sampleRate = "8000 Hz",
+                sampleRate = "1000 Hz",
                 samples = pcg,
                 lineColor = PcgColor,
                 modifier = Modifier.weight(1f)
@@ -489,7 +489,7 @@ fun StatisticsDialog(
 
                 Text("ECG sample rate: 1000 Hz")
                 Text("PPG sample rate: 1000 Hz")
-                Text("PCG sample rate: 8000 Hz")
+                Text("PCG sample rate: 1000 Hz")
 
                 Text("BLE status: Not connected")
             }
