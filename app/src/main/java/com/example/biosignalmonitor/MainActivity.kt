@@ -58,6 +58,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val audioBytes = FakeBleSource.makeAudioPacket(sequence = 1)
+        val bioBytes = FakeBleSource.makeBioPacket(sequence = 1)
+
+        Log.d("PACKET_TEST", "audio size = ${audioBytes.size}")
+        Log.d("PACKET_TEST", "bio size = ${bioBytes.size}")
+        Log.d("PACKET_TEST", "audio first byte = 0x%02X".format(audioBytes[0]))
+        Log.d("PACKET_TEST", "bio first byte = 0x%02X".format(bioBytes[0]))
+        Log.d("PACKET_TEST", "audio footer = 0x%02X".format(audioBytes.last()))
+        Log.d("PACKET_TEST", "bio footer = 0x%02X".format(bioBytes.last()))
+
         setContent {
             BioSignalMonitorTheme {
                 val ecgBuffer = remember {
@@ -108,55 +118,59 @@ class MainActivity : ComponentActivity() {
                     mutableStateOf(0L)
                 }
 
+//                LaunchedEffect(Unit) {
+//                    var sequence = 0
+//
+//                    while (true) {
+//                        if (!isPaused) {
+//                            val bytes =
+//                                FakeBleSource.makePacket(sequence)
+//
+//                            val packet =
+//                                PacketParser.parse(bytes)
+//
+//                            if (packet != null) {
+//                                ecgBuffer.pushSamples(packet.ecg)
+//                                ppgBuffer.pushSamples(packet.ppg)
+//                                pcgBuffer.pushSamples(packet.pcg)
+//
+//                                ecgSamples = ecgBuffer.snapshot()
+//                                ppgSamples = ppgBuffer.snapshot()
+//                                pcgSamples = pcgBuffer.snapshot()
+//
+//                                currentSequence = packet.sequence
+//                                currentTimestamp = packet.timestamp
+//                                packetCount++
+//
+//                                if (sequence % 50 == 0) {
+//                                    Log.d(
+//                                        "REALTIME_TEST",
+//                                        "seq=${packet.sequence}, " +
+//                                                "time=${packet.timestamp}, " +
+//                                                "count=${packet.count}, " +
+//                                                "received=$packetCount, " +
+//                                                "errors=$parseErrorCount"
+//                                    )
+//                                }
+//                            } else {
+//                                parseErrorCount++
+//
+//                                Log.e(
+//                                    "REALTIME_TEST",
+//                                    "Parse failed at seq=$sequence"
+//                                )
+//                            }
+//
+//                            sequence =
+//                                (sequence + 1) and 0xFFFF
+//                        }
+//
+//                        delay(32L)
+//                    }
+//                }
+
                 LaunchedEffect(Unit) {
-                    var sequence = 0
-
-                    while (true) {
-                        if (!isPaused) {
-                            val bytes =
-                                FakeBleSource.makePacket(sequence)
-
-                            val packet =
-                                PacketParser.parse(bytes)
-
-                            if (packet != null) {
-                                ecgBuffer.pushSamples(packet.ecg)
-                                ppgBuffer.pushSamples(packet.ppg)
-                                pcgBuffer.pushSamples(packet.pcg)
-
-                                ecgSamples = ecgBuffer.snapshot()
-                                ppgSamples = ppgBuffer.snapshot()
-                                pcgSamples = pcgBuffer.snapshot()
-
-                                currentSequence = packet.sequence
-                                currentTimestamp = packet.timestamp
-                                packetCount++
-
-                                if (sequence % 50 == 0) {
-                                    Log.d(
-                                        "REALTIME_TEST",
-                                        "seq=${packet.sequence}, " +
-                                                "time=${packet.timestamp}, " +
-                                                "count=${packet.count}, " +
-                                                "received=$packetCount, " +
-                                                "errors=$parseErrorCount"
-                                    )
-                                }
-                            } else {
-                                parseErrorCount++
-
-                                Log.e(
-                                    "REALTIME_TEST",
-                                    "Parse failed at seq=$sequence"
-                                )
-                            }
-
-                            sequence =
-                                (sequence + 1) and 0xFFFF
-                        }
-
-                        delay(32L)
-                    }
+                    Log.d("REALTIME_TEST", "Realtime loop paused because packet format is being updated")
                 }
 
                 BioSignalDashboard(
