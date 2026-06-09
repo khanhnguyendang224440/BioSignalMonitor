@@ -474,14 +474,14 @@ fun StatisticsDialog(
     pcgBufferSize: Int,
     onDismiss: () -> Unit
 ) {
+    val scrollState = rememberScrollState()
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text("System Statistics")
         },
         text = {
-            val scrollState = rememberScrollState()
-
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -490,22 +490,36 @@ fun StatisticsDialog(
                     .padding(end = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                Text("=== Mode ===")
                 Text("Mode: Simulation")
+                Text("BLE status: Not connected")
+
+                Text("")
+                Text("=== Packet Format ===")
+                Text("Packet strategy: Split Audio/Bio")
+                Text("Header: 0xAA")
+                Text("Version: 0x01")
+                Text("Footer: 0x55")
+                Text("Audio type: 0x01")
+                Text("Bio type: 0x02")
+
+                Text("")
+                Text("=== Packet Size ===")
+                Text("Audio packet: 137 bytes")
+                Text("Bio packet: 201 bytes")
+
+                Text("")
+                Text("=== Runtime ===")
                 Text("Sequence: $sequence")
                 Text("Running time: ${formatTime(timestamp)}")
-
                 Text("Packets received: $packetCount")
                 Text("Parse errors: $parseErrorCount")
 
+                Text("")
+                Text("=== Ring Buffer ===")
                 Text("ECG buffer: $ecgBufferSize / 500")
                 Text("PPG buffer: $ppgBufferSize / 500")
                 Text("PCG buffer: $pcgBufferSize / 500")
-
-                Text("ECG sample rate: 1000 Hz")
-                Text("PPG sample rate: 1000 Hz")
-                Text("PCG sample rate: 1000 Hz")
-
-                Text("BLE status: Not connected")
             }
         },
         confirmButton = {

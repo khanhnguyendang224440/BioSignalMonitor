@@ -1,3 +1,20 @@
+/**
+ * @file FakeBleSource.kt
+ * @brief Tạo dữ liệu BLE giả lập để kiểm thử ứng dụng BioSignalMonitor.
+ *
+ * File này mô phỏng các packet Bio và Audio theo đúng định dạng dữ liệu
+ * dự kiến nhận từ thiết bị ESP32:
+ *
+ * Header | Version | Type | Sequence | Payload Length | Data | CRC | Footer
+ *
+ * Dữ liệu giả lập được đưa vào cùng luồng phân tích và xử lý với dữ liệu BLE thật.
+ * Nhờ đó, ứng dụng có thể kiểm thử chức năng nhận packet, kiểm tra CRC,
+ * phát hiện mất packet và hiển thị tín hiệu trước khi kết nối phần cứng STM32.
+ *
+ * Copyright (c) 2026 Nguyen Dang Khanh
+ * SPDX-License-Identifier: MIT
+ */
+
 package com.example.biosignalmonitor.fake
 
 import java.nio.ByteBuffer
