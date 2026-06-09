@@ -12,6 +12,7 @@
  * phát hiện mất packet và hiển thị tín hiệu trước khi kết nối phần cứng STM32.
  *
  * Copyright (c) 2026 Nguyen Dang Khanh
+ * 9/6/2026
  * SPDX-License-Identifier: MIT
  */
 
