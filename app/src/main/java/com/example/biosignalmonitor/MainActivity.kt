@@ -1,10 +1,28 @@
+/**
+ * @file MainActivity.kt
+ * @brief Quản lý màn hình chính của ứng dụng BioSignalMonitor.
+ *
+ * File này xây dựng giao diện dashboard dùng để hiển thị waveform ECG,
+ * PPG và PCG, đồng thời quản lý các thao tác người dùng như tạm dừng,
+ * tiếp tục, reset và xem thông số hệ thống.
+ *
+ * Trong giai đoạn hiện tại, MainActivity sử dụng dữ liệu giả lập để kiểm
+ * thử giao diện. Logic nhận packet, giải mã và ghép dữ liệu sẽ được tách
+ * sang các thành phần riêng trong tầng protocol và signal.
+ *
+ * MainActivity chỉ nên quản lý trạng thái giao diện và điều phối dữ liệu,
+ * không trực tiếp xử lý cấu trúc binary packet BLE.
+ *
+ * Copyright (c) 2026 Nguyen Dang Khanh
+ * 9/6/2026
+ * SPDX-License-Identifier: MIT
+ */
 package com.example.biosignalmonitor
 
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,14 +30,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -35,13 +55,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.biosignalmonitor.fake.FakeBleSource
-import com.example.biosignalmonitor.protocol.PacketParser
 import com.example.biosignalmonitor.signal.SignalRingBuffer
 import com.example.biosignalmonitor.ui.theme.BioSignalMonitorTheme
-import kotlinx.coroutines.delay
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.heightIn
 
 private val AppBackground = Color(0xFF0B1220)
 private val CardBackground = Color(0xFF121C2B)
@@ -117,57 +132,6 @@ class MainActivity : ComponentActivity() {
                 var parseErrorCount by remember {
                     mutableStateOf(0L)
                 }
-
-//                LaunchedEffect(Unit) {
-//                    var sequence = 0
-//
-//                    while (true) {
-//                        if (!isPaused) {
-//                            val bytes =
-//                                FakeBleSource.makePacket(sequence)
-//
-//                            val packet =
-//                                PacketParser.parse(bytes)
-//
-//                            if (packet != null) {
-//                                ecgBuffer.pushSamples(packet.ecg)
-//                                ppgBuffer.pushSamples(packet.ppg)
-//                                pcgBuffer.pushSamples(packet.pcg)
-//
-//                                ecgSamples = ecgBuffer.snapshot()
-//                                ppgSamples = ppgBuffer.snapshot()
-//                                pcgSamples = pcgBuffer.snapshot()
-//
-//                                currentSequence = packet.sequence
-//                                currentTimestamp = packet.timestamp
-//                                packetCount++
-//
-//                                if (sequence % 50 == 0) {
-//                                    Log.d(
-//                                        "REALTIME_TEST",
-//                                        "seq=${packet.sequence}, " +
-//                                                "time=${packet.timestamp}, " +
-//                                                "count=${packet.count}, " +
-//                                                "received=$packetCount, " +
-//                                                "errors=$parseErrorCount"
-//                                    )
-//                                }
-//                            } else {
-//                                parseErrorCount++
-//
-//                                Log.e(
-//                                    "REALTIME_TEST",
-//                                    "Parse failed at seq=$sequence"
-//                                )
-//                            }
-//
-//                            sequence =
-//                                (sequence + 1) and 0xFFFF
-//                        }
-//
-//                        delay(32L)
-//                    }
-//                }
 
                 LaunchedEffect(Unit) {
                     Log.d("REALTIME_TEST", "Realtime loop paused because packet format is being updated")

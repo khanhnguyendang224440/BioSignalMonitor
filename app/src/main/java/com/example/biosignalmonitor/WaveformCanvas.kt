@@ -1,3 +1,20 @@
+/**
+ * @file WaveformCanvas.kt
+ * @brief Vẽ waveform của các tín hiệu ECG, PPG và PCG trên giao diện.
+ *
+ * File này nhận một mảng mẫu FloatArray và sử dụng Jetpack Compose Canvas
+ * để vẽ lưới nền, đường baseline và đường tín hiệu theo thời gian.
+ *
+ * WaveformCanvas không phụ thuộc vào nguồn dữ liệu. Dữ liệu đầu vào có thể
+ * đến từ FakeBleSource, BLE thật, file CSV hoặc nguồn kiểm thử khác.
+ *
+ * File này chỉ chịu trách nhiệm hiển thị, không thực hiện nhận BLE,
+ * giải mã packet, ghép block hoặc lưu dữ liệu.
+ *
+ * Copyright (c) 2026 Nguyen Dang Khanh
+ * 9/6/2026
+ * SPDX-License-Identifier: MIT
+ */
 package com.example.biosignalmonitor
 
 import androidx.compose.foundation.Canvas
