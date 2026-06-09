@@ -17,6 +17,11 @@
  */
 package com.example.biosignalmonitor.signal
 
+/**
+ * Bộ đệm vòng dùng để lưu các mẫu tín hiệu mới nhất.
+ *
+ * @property capacity Số mẫu tối đa được giữ trong buffer.
+ */
 class SignalRingBuffer(
     private val capacity: Int
 ) {
@@ -25,6 +30,15 @@ class SignalRingBuffer(
     private var writeIndex = 0
     private var currentSize = 0
 
+    init {
+        require(capacity > 0) {
+            "Capacity must be greater than 0"
+        }
+    }
+
+    /**
+     * Thêm một mẫu Float vào buffer.
+     */
     fun push(value: Float) {
         buffer[writeIndex] = value
         writeIndex = (writeIndex + 1) % capacity
@@ -34,12 +48,37 @@ class SignalRingBuffer(
         }
     }
 
+    /**
+     * Thêm mảng ECG kiểu int16_t / ShortArray.
+     */
     fun pushSamples(samples: ShortArray) {
         for (sample in samples) {
             push(sample.toFloat())
         }
     }
 
+    /**
+     * Thêm mảng PCG kiểu int32_t / IntArray.
+     */
+    fun pushSamples(samples: IntArray) {
+        for (sample in samples) {
+            push(sample.toFloat())
+        }
+    }
+
+    /**
+     * Thêm mảng PPG IR kiểu uint32_t đã được lưu bằng LongArray.
+     */
+    fun pushSamples(samples: LongArray) {
+        for (sample in samples) {
+            push(sample.toFloat())
+        }
+    }
+
+    /**
+     * Trả về dữ liệu theo đúng thứ tự thời gian:
+     * mẫu cũ nhất đứng trước, mẫu mới nhất đứng sau.
+     */
     fun snapshot(): FloatArray {
         if (currentSize == 0) {
             return FloatArray(0)
@@ -47,34 +86,47 @@ class SignalRingBuffer(
 
         val output = FloatArray(currentSize)
 
-        // Khi buffer chưa đầy, dữ liệu nằm từ index 0 đến currentSize - 1.
         if (currentSize < capacity) {
-            for (i in 0 until currentSize) {
-                output[i] = buffer[i]
+            for (index in 0 until currentSize) {
+                output[index] = buffer[index]
             }
 
             return output
         }
 
-        // Khi buffer đầy, writeIndex chính là vị trí của mẫu cũ nhất.
         var outputIndex = 0
 
-        for (i in writeIndex until capacity) {
-            output[outputIndex++] = buffer[i]
+        for (index in writeIndex until capacity) {
+            output[outputIndex++] = buffer[index]
         }
 
-        for (i in 0 until writeIndex) {
-            output[outputIndex++] = buffer[i]
+        for (index in 0 until writeIndex) {
+            output[outputIndex++] = buffer[index]
         }
 
         return output
     }
 
+    /**
+     * Xóa toàn bộ dữ liệu trong buffer.
+     */
     fun clear() {
+        buffer.fill(0f)
         writeIndex = 0
         currentSize = 0
-        buffer.fill(0f)
     }
 
-    fun size(): Int = currentSize
+    /**
+     * Trả về số mẫu hiện đang có trong buffer.
+     */
+    fun size(): Int {
+        return currentSize
+    }
+
+    /**
+     * Trả về dung lượng tối đa của buffer.
+     */
+    fun capacity(): Int {
+        return capacity
+    }
 }

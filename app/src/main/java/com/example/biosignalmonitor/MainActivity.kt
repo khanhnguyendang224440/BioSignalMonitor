@@ -60,6 +60,7 @@ import com.example.biosignalmonitor.protocol.PacketParser
 import com.example.biosignalmonitor.protocol.ParsedBlePacket
 import com.example.biosignalmonitor.signal.SignalRingBuffer
 import com.example.biosignalmonitor.ui.theme.BioSignalMonitorTheme
+import kotlinx.coroutines.delay
 
 private val AppBackground = Color(0xFF0B1220)
 private val CardBackground = Color(0xFF121C2B)
@@ -76,108 +77,108 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-            // =========================================================
-            // 1. Tạo hai packet giả theo đúng định dạng STM32/BLE
-            // =========================================================
-
-            val audioBytes =
-                FakeBleSource.makeAudioPacket(sequence = 10)
-
-            val bioBytes =
-                FakeBleSource.makeBioPacket(sequence = 10)
-
-            // =========================================================
-            // 2. Parse ByteArray thành Audio packet và Bio packet
-            // =========================================================
-
-            val parsedAudio =
-                PacketParser.parse(audioBytes)
-
-            val parsedBio =
-                PacketParser.parse(bioBytes)
-
-            // =========================================================
-            // 3. Kiểm tra kết quả PacketParser
-            // =========================================================
-
-            if (parsedAudio is ParsedBlePacket.Audio) {
-                Log.d(
-                    "PARSER_TEST",
-                    "Audio seq=${parsedAudio.sequence}, " +
-                            "PCG count=${parsedAudio.pcg.size}"
-                )
-            } else {
-                Log.e(
-                    "PARSER_TEST",
-                    "Audio packet parse failed"
-                )
-            }
-
-            if (parsedBio is ParsedBlePacket.Bio) {
-                Log.d(
-                    "PARSER_TEST",
-                    "Bio seq=${parsedBio.sequence}, " +
-                            "PPG count=${parsedBio.ppgIr.size}, " +
-                            "ECG count=${parsedBio.ecg.size}"
-                )
-            } else {
-                Log.e(
-                    "PARSER_TEST",
-                    "Bio packet parse failed"
-                )
-            }
-
-            // =========================================================
-            // 4. Kiểm tra PacketAssembler
-            // =========================================================
-
-            val packetAssembler = PacketAssembler()
-
-            val frameAfterAudio =
-                parsedAudio?.let { packet ->
-                    packetAssembler.push(packet)
-                }
-
-            Log.d(
-                "ASSEMBLER_TEST",
-                "After Audio: frame=${frameAfterAudio != null}, " +
-                        "pendingAudio=${packetAssembler.pendingAudioCount()}, " +
-                        "pendingBio=${packetAssembler.pendingBioCount()}"
-            )
-
-            val frameAfterBio =
-                parsedBio?.let { packet ->
-                    packetAssembler.push(packet)
-                }
-
-            if (frameAfterBio != null) {
-                Log.d(
-                    "ASSEMBLER_TEST",
-                    "Frame seq=${frameAfterBio.sequence}, " +
-                            "ECG=${frameAfterBio.ecg.size}, " +
-                            "PPG=${frameAfterBio.ppgIr.size}, " +
-                            "PCG=${frameAfterBio.pcg.size}, " +
-                            "valid=${frameAfterBio.isValid()}"
-                )
-
-                Log.d(
-                    "ASSEMBLER_TEST",
-                    "audioRx=${packetAssembler.audioPacketsReceived}, " +
-                            "bioRx=${packetAssembler.bioPacketsReceived}, " +
-                            "completed=${packetAssembler.completedFrames}, " +
-                            "incomplete=${packetAssembler.incompleteFrames}"
-                )
-            } else {
-                Log.e(
-                    "ASSEMBLER_TEST",
-                    "Frame assembly failed"
-                )
-            }
-
-            // =========================================================
-            // 5. Giao diện ứng dụng
-
-            // =========================================================
+//            // =========================================================
+//            // 1. Tạo hai packet giả theo đúng định dạng STM32/BLE
+//            // =========================================================
+//
+//            val audioBytes =
+//                FakeBleSource.makeAudioPacket(sequence = 10)
+//
+//            val bioBytes =
+//                FakeBleSource.makeBioPacket(sequence = 10)
+//
+//            // =========================================================
+//            // 2. Parse ByteArray thành Audio packet và Bio packet
+//            // =========================================================
+//
+//            val parsedAudio =
+//                PacketParser.parse(audioBytes)
+//
+//            val parsedBio =
+//                PacketParser.parse(bioBytes)
+//
+//            // =========================================================
+//            // 3. Kiểm tra kết quả PacketParser
+//            // =========================================================
+//
+//            if (parsedAudio is ParsedBlePacket.Audio) {
+//                Log.d(
+//                    "PARSER_TEST",
+//                    "Audio seq=${parsedAudio.sequence}, " +
+//                            "PCG count=${parsedAudio.pcg.size}"
+//                )
+//            } else {
+//                Log.e(
+//                    "PARSER_TEST",
+//                    "Audio packet parse failed"
+//                )
+//            }
+//
+//            if (parsedBio is ParsedBlePacket.Bio) {
+//                Log.d(
+//                    "PARSER_TEST",
+//                    "Bio seq=${parsedBio.sequence}, " +
+//                            "PPG count=${parsedBio.ppgIr.size}, " +
+//                            "ECG count=${parsedBio.ecg.size}"
+//                )
+//            } else {
+//                Log.e(
+//                    "PARSER_TEST",
+//                    "Bio packet parse failed"
+//                )
+//            }
+//
+//            // =========================================================
+//            // 4. Kiểm tra PacketAssembler
+//            // =========================================================
+//
+//            val packetAssembler = PacketAssembler()
+//
+//            val frameAfterAudio =
+//                parsedAudio?.let { packet ->
+//                    packetAssembler.push(packet)
+//                }
+//
+//            Log.d(
+//                "ASSEMBLER_TEST",
+//                "After Audio: frame=${frameAfterAudio != null}, " +
+//                        "pendingAudio=${packetAssembler.pendingAudioCount()}, " +
+//                        "pendingBio=${packetAssembler.pendingBioCount()}"
+//            )
+//
+//            val frameAfterBio =
+//                parsedBio?.let { packet ->
+//                    packetAssembler.push(packet)
+//                }
+//
+//            if (frameAfterBio != null) {
+//                Log.d(
+//                    "ASSEMBLER_TEST",
+//                    "Frame seq=${frameAfterBio.sequence}, " +
+//                            "ECG=${frameAfterBio.ecg.size}, " +
+//                            "PPG=${frameAfterBio.ppgIr.size}, " +
+//                            "PCG=${frameAfterBio.pcg.size}, " +
+//                            "valid=${frameAfterBio.isValid()}"
+//                )
+//
+//                Log.d(
+//                    "ASSEMBLER_TEST",
+//                    "audioRx=${packetAssembler.audioPacketsReceived}, " +
+//                            "bioRx=${packetAssembler.bioPacketsReceived}, " +
+//                            "completed=${packetAssembler.completedFrames}, " +
+//                            "incomplete=${packetAssembler.incompleteFrames}"
+//                )
+//            } else {
+//                Log.e(
+//                    "ASSEMBLER_TEST",
+//                    "Frame assembly failed"
+//                )
+//            }
+//
+//            // =========================================================
+//            // 5. Giao diện ứng dụng
+//
+//            // =========================================================
 
         setContent {
             BioSignalMonitorTheme {
@@ -191,6 +192,10 @@ class MainActivity : ComponentActivity() {
 
                 val pcgBuffer = remember {
                     SignalRingBuffer(capacity = 500)
+                }
+
+                val realtimeAssembler = remember {
+                    PacketAssembler()
                 }
 
                 var ecgSamples by remember {
@@ -230,7 +235,128 @@ class MainActivity : ComponentActivity() {
                 }
 
                 LaunchedEffect(Unit) {
-                    Log.d("REALTIME_TEST", "Realtime loop paused because packet format is being updated")
+                    var sequence = 0
+                    var elapsedTimeMs = 0L
+
+                    while (true) {
+                        if (!isPaused) {
+                            // =====================================================
+                            // 1. Giả lập hai BLE notification cùng sequence
+                            // =====================================================
+
+                            val audioBytes =
+                                FakeBleSource.makeAudioPacket(sequence)
+
+                            val bioBytes =
+                                FakeBleSource.makeBioPacket(sequence)
+
+                            // =====================================================
+                            // 2. Parse Audio packet
+                            // =====================================================
+
+                            val parsedAudio =
+                                PacketParser.parse(audioBytes)
+
+                            if (parsedAudio != null) {
+                                packetCount++
+
+                                val frameFromAudio =
+                                    realtimeAssembler.push(parsedAudio)
+
+                                /*
+                                 * Thông thường frameFromAudio sẽ null vì Bio packet
+                                 * của cùng sequence chưa được đưa vào assembler.
+                                 */
+                                if (frameFromAudio != null) {
+                                    ecgBuffer.pushSamples(frameFromAudio.ecg)
+                                    ppgBuffer.pushSamples(frameFromAudio.ppgIr)
+                                    pcgBuffer.pushSamples(frameFromAudio.pcg)
+
+                                    ecgSamples = ecgBuffer.snapshot()
+                                    ppgSamples = ppgBuffer.snapshot()
+                                    pcgSamples = pcgBuffer.snapshot()
+
+                                    currentSequence = frameFromAudio.sequence
+                                    elapsedTimeMs += 32L
+                                    currentTimestamp = elapsedTimeMs
+                                }
+                            } else {
+                                parseErrorCount++
+
+                                Log.e(
+                                    "REALTIME_TEST",
+                                    "Audio parse failed at seq=$sequence"
+                                )
+                            }
+
+                            // =====================================================
+                            // 3. Parse Bio packet
+                            // =====================================================
+
+                            val parsedBio =
+                                PacketParser.parse(bioBytes)
+
+                            if (parsedBio != null) {
+                                packetCount++
+
+                                val frameFromBio =
+                                    realtimeAssembler.push(parsedBio)
+
+                                /*
+                                 * Sau khi Bio packet vào, assembler đã có cả Audio
+                                 * và Bio cùng sequence nên thường tạo frame tại đây.
+                                 */
+                                if (frameFromBio != null) {
+                                    ecgBuffer.pushSamples(frameFromBio.ecg)
+                                    ppgBuffer.pushSamples(frameFromBio.ppgIr)
+                                    pcgBuffer.pushSamples(frameFromBio.pcg)
+
+                                    ecgSamples = ecgBuffer.snapshot()
+                                    ppgSamples = ppgBuffer.snapshot()
+                                    pcgSamples = pcgBuffer.snapshot()
+
+                                    currentSequence = frameFromBio.sequence
+                                    elapsedTimeMs += 32L
+                                    currentTimestamp = elapsedTimeMs
+                                }
+                            } else {
+                                parseErrorCount++
+
+                                Log.e(
+                                    "REALTIME_TEST",
+                                    "Bio parse failed at seq=$sequence"
+                                )
+                            }
+
+                            // Chỉ log định kỳ để tránh làm chậm ứng dụng.
+                            if (sequence % 50 == 0) {
+                                Log.d(
+                                    "REALTIME_TEST",
+                                    "seq=$sequence, " +
+                                            "audioRx=${realtimeAssembler.audioPacketsReceived}, " +
+                                            "bioRx=${realtimeAssembler.bioPacketsReceived}, " +
+                                            "frames=${realtimeAssembler.completedFrames}, " +
+                                            "incomplete=${realtimeAssembler.incompleteFrames}, " +
+                                            "parseErrors=$parseErrorCount, " +
+                                            "buffers=${ecgBuffer.size()}/" +
+                                            "${ppgBuffer.size()}/" +
+                                            "${pcgBuffer.size()}"
+                                )
+                            }
+
+                            /*
+                             * Sequence trong packet là uint8_t:
+                             * 0, 1, 2, ..., 255, sau đó quay về 0.
+                             */
+                            sequence = (sequence + 1) and 0xFF
+                        }
+
+                        /*
+                         * Mỗi block truyền có 32 mẫu ở tần số hiệu dụng 1000 Hz:
+                         * 32 / 1000 = 0,032 giây = 32 ms.
+                         */
+                        delay(32L)
+                    }
                 }
 
                 BioSignalDashboard(
@@ -253,6 +379,8 @@ class MainActivity : ComponentActivity() {
                         ecgBuffer.clear()
                         ppgBuffer.clear()
                         pcgBuffer.clear()
+
+                        realtimeAssembler.clear()
 
                         ecgSamples = FloatArray(0)
                         ppgSamples = FloatArray(0)
