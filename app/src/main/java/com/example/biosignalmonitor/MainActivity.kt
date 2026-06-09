@@ -55,10 +55,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.biosignalmonitor.fake.FakeBleSource
-import com.example.biosignalmonitor.signal.SignalRingBuffer
-import com.example.biosignalmonitor.ui.theme.BioSignalMonitorTheme
+import com.example.biosignalmonitor.protocol.PacketAssembler
 import com.example.biosignalmonitor.protocol.PacketParser
 import com.example.biosignalmonitor.protocol.ParsedBlePacket
+import com.example.biosignalmonitor.signal.SignalRingBuffer
+import com.example.biosignalmonitor.ui.theme.BioSignalMonitorTheme
 
 private val AppBackground = Color(0xFF0B1220)
 private val CardBackground = Color(0xFF121C2B)
@@ -75,54 +76,108 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val audioBytes =
-            FakeBleSource.makeAudioPacket(sequence = 10)
+            // =========================================================
+            // 1. Tạo hai packet giả theo đúng định dạng STM32/BLE
+            // =========================================================
 
-        val bioBytes =
-            FakeBleSource.makeBioPacket(sequence = 10)
+            val audioBytes =
+                FakeBleSource.makeAudioPacket(sequence = 10)
 
-        val parsedAudio =
-            PacketParser.parse(audioBytes)
+            val bioBytes =
+                FakeBleSource.makeBioPacket(sequence = 10)
 
-        val parsedBio =
-            PacketParser.parse(bioBytes)
+            // =========================================================
+            // 2. Parse ByteArray thành Audio packet và Bio packet
+            // =========================================================
 
-        if (parsedAudio is ParsedBlePacket.Audio) {
+            val parsedAudio =
+                PacketParser.parse(audioBytes)
+
+            val parsedBio =
+                PacketParser.parse(bioBytes)
+
+            // =========================================================
+            // 3. Kiểm tra kết quả PacketParser
+            // =========================================================
+
+            if (parsedAudio is ParsedBlePacket.Audio) {
+                Log.d(
+                    "PARSER_TEST",
+                    "Audio seq=${parsedAudio.sequence}, " +
+                            "PCG count=${parsedAudio.pcg.size}"
+                )
+            } else {
+                Log.e(
+                    "PARSER_TEST",
+                    "Audio packet parse failed"
+                )
+            }
+
+            if (parsedBio is ParsedBlePacket.Bio) {
+                Log.d(
+                    "PARSER_TEST",
+                    "Bio seq=${parsedBio.sequence}, " +
+                            "PPG count=${parsedBio.ppgIr.size}, " +
+                            "ECG count=${parsedBio.ecg.size}"
+                )
+            } else {
+                Log.e(
+                    "PARSER_TEST",
+                    "Bio packet parse failed"
+                )
+            }
+
+            // =========================================================
+            // 4. Kiểm tra PacketAssembler
+            // =========================================================
+
+            val packetAssembler = PacketAssembler()
+
+            val frameAfterAudio =
+                parsedAudio?.let { packet ->
+                    packetAssembler.push(packet)
+                }
+
             Log.d(
-                "PARSER_TEST",
-                "Audio seq=${parsedAudio.sequence}, " +
-                        "PCG count=${parsedAudio.pcg.size}"
+                "ASSEMBLER_TEST",
+                "After Audio: frame=${frameAfterAudio != null}, " +
+                        "pendingAudio=${packetAssembler.pendingAudioCount()}, " +
+                        "pendingBio=${packetAssembler.pendingBioCount()}"
             )
-        } else {
-            Log.e(
-                "PARSER_TEST",
-                "Audio packet parse failed"
-            )
-        }
 
-        if (parsedBio is ParsedBlePacket.Bio) {
-            Log.d(
-                "PARSER_TEST",
-                "Bio seq=${parsedBio.sequence}, " +
-                        "PPG count=${parsedBio.ppgIr.size}, " +
-                        "ECG count=${parsedBio.ecg.size}"
-            )
-        } else {
-            Log.e(
-                "PARSER_TEST",
-                "Bio packet parse failed"
-            )
-        }
+            val frameAfterBio =
+                parsedBio?.let { packet ->
+                    packetAssembler.push(packet)
+                }
 
-//        val audioBytes = FakeBleSource.makeAudioPacket(sequence = 1)
-//        val bioBytes = FakeBleSource.makeBioPacket(sequence = 1)
-//
-//        Log.d("PACKET_TEST", "audio size = ${audioBytes.size}")
-//        Log.d("PACKET_TEST", "bio size = ${bioBytes.size}")
-//        Log.d("PACKET_TEST", "audio first byte = 0x%02X".format(audioBytes[0]))
-//        Log.d("PACKET_TEST", "bio first byte = 0x%02X".format(bioBytes[0]))
-//        Log.d("PACKET_TEST", "audio footer = 0x%02X".format(audioBytes.last()))
-//        Log.d("PACKET_TEST", "bio footer = 0x%02X".format(bioBytes.last()))
+            if (frameAfterBio != null) {
+                Log.d(
+                    "ASSEMBLER_TEST",
+                    "Frame seq=${frameAfterBio.sequence}, " +
+                            "ECG=${frameAfterBio.ecg.size}, " +
+                            "PPG=${frameAfterBio.ppgIr.size}, " +
+                            "PCG=${frameAfterBio.pcg.size}, " +
+                            "valid=${frameAfterBio.isValid()}"
+                )
+
+                Log.d(
+                    "ASSEMBLER_TEST",
+                    "audioRx=${packetAssembler.audioPacketsReceived}, " +
+                            "bioRx=${packetAssembler.bioPacketsReceived}, " +
+                            "completed=${packetAssembler.completedFrames}, " +
+                            "incomplete=${packetAssembler.incompleteFrames}"
+                )
+            } else {
+                Log.e(
+                    "ASSEMBLER_TEST",
+                    "Frame assembly failed"
+                )
+            }
+
+            // =========================================================
+            // 5. Giao diện ứng dụng
+
+            // =========================================================
 
         setContent {
             BioSignalMonitorTheme {
