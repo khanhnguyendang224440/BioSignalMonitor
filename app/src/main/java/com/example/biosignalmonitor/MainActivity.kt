@@ -87,16 +87,6 @@ class MainActivity : ComponentActivity() {
         val parsedBio =
             PacketParser.parse(bioBytes)
 
-        Log.d(
-            "PARSER_TEST",
-            "Audio result = $parsedAudio"
-        )
-
-        Log.d(
-            "PARSER_TEST",
-            "Bio result = $parsedBio"
-        )
-
         if (parsedAudio is ParsedBlePacket.Audio) {
             Log.d(
                 "PARSER_TEST",
