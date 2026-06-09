@@ -57,6 +57,8 @@ import androidx.compose.ui.unit.sp
 import com.example.biosignalmonitor.fake.FakeBleSource
 import com.example.biosignalmonitor.signal.SignalRingBuffer
 import com.example.biosignalmonitor.ui.theme.BioSignalMonitorTheme
+import com.example.biosignalmonitor.protocol.PacketParser
+import com.example.biosignalmonitor.protocol.ParsedBlePacket
 
 private val AppBackground = Color(0xFF0B1220)
 private val CardBackground = Color(0xFF121C2B)
@@ -73,15 +75,64 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val audioBytes = FakeBleSource.makeAudioPacket(sequence = 1)
-        val bioBytes = FakeBleSource.makeBioPacket(sequence = 1)
+        val audioBytes =
+            FakeBleSource.makeAudioPacket(sequence = 10)
 
-        Log.d("PACKET_TEST", "audio size = ${audioBytes.size}")
-        Log.d("PACKET_TEST", "bio size = ${bioBytes.size}")
-        Log.d("PACKET_TEST", "audio first byte = 0x%02X".format(audioBytes[0]))
-        Log.d("PACKET_TEST", "bio first byte = 0x%02X".format(bioBytes[0]))
-        Log.d("PACKET_TEST", "audio footer = 0x%02X".format(audioBytes.last()))
-        Log.d("PACKET_TEST", "bio footer = 0x%02X".format(bioBytes.last()))
+        val bioBytes =
+            FakeBleSource.makeBioPacket(sequence = 10)
+
+        val parsedAudio =
+            PacketParser.parse(audioBytes)
+
+        val parsedBio =
+            PacketParser.parse(bioBytes)
+
+        Log.d(
+            "PARSER_TEST",
+            "Audio result = $parsedAudio"
+        )
+
+        Log.d(
+            "PARSER_TEST",
+            "Bio result = $parsedBio"
+        )
+
+        if (parsedAudio is ParsedBlePacket.Audio) {
+            Log.d(
+                "PARSER_TEST",
+                "Audio seq=${parsedAudio.sequence}, " +
+                        "PCG count=${parsedAudio.pcg.size}"
+            )
+        } else {
+            Log.e(
+                "PARSER_TEST",
+                "Audio packet parse failed"
+            )
+        }
+
+        if (parsedBio is ParsedBlePacket.Bio) {
+            Log.d(
+                "PARSER_TEST",
+                "Bio seq=${parsedBio.sequence}, " +
+                        "PPG count=${parsedBio.ppgIr.size}, " +
+                        "ECG count=${parsedBio.ecg.size}"
+            )
+        } else {
+            Log.e(
+                "PARSER_TEST",
+                "Bio packet parse failed"
+            )
+        }
+
+//        val audioBytes = FakeBleSource.makeAudioPacket(sequence = 1)
+//        val bioBytes = FakeBleSource.makeBioPacket(sequence = 1)
+//
+//        Log.d("PACKET_TEST", "audio size = ${audioBytes.size}")
+//        Log.d("PACKET_TEST", "bio size = ${bioBytes.size}")
+//        Log.d("PACKET_TEST", "audio first byte = 0x%02X".format(audioBytes[0]))
+//        Log.d("PACKET_TEST", "bio first byte = 0x%02X".format(bioBytes[0]))
+//        Log.d("PACKET_TEST", "audio footer = 0x%02X".format(audioBytes.last()))
+//        Log.d("PACKET_TEST", "bio footer = 0x%02X".format(bioBytes.last()))
 
         setContent {
             BioSignalMonitorTheme {
