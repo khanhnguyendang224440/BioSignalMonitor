@@ -183,15 +183,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             BioSignalMonitorTheme {
                 val ecgBuffer = remember {
-                    SignalRingBuffer(capacity = 500)
+                    SignalRingBuffer(capacity = 2000)
                 }
 
                 val ppgBuffer = remember {
-                    SignalRingBuffer(capacity = 500)
+                    SignalRingBuffer(capacity = 2000)
                 }
 
                 val pcgBuffer = remember {
-                    SignalRingBuffer(capacity = 500)
+                    SignalRingBuffer(capacity = 2000)
                 }
 
                 val realtimeAssembler = remember {
@@ -705,9 +705,9 @@ fun StatisticsDialog(
 
                 Text("")
                 Text("=== Ring Buffer ===")
-                Text("ECG buffer: $ecgBufferSize / 500")
-                Text("PPG buffer: $ppgBufferSize / 500")
-                Text("PCG buffer: $pcgBufferSize / 500")
+                Text("ECG buffer: $ecgBufferSize / 2000")
+                Text("PPG buffer: $ppgBufferSize / 2000")
+                Text("PCG buffer: $pcgBufferSize / 2000")
             }
         },
         confirmButton = {
