@@ -28,6 +28,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -52,6 +54,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,6 +65,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.biosignalmonitor.ble.BleConnectionState
+import com.example.biosignalmonitor.ble.BleManager
 import com.example.biosignalmonitor.fake.FakeBleSource
 import com.example.biosignalmonitor.protocol.PacketAssembler
 import com.example.biosignalmonitor.protocol.PacketParser
@@ -227,6 +232,79 @@ class MainActivity : ComponentActivity() {
                                 "BLE permission: denied"
                             }
                     }
+
+                /*
+                 * Handler dùng để đưa callback BLE từ background thread
+                 * về main thread trước khi cập nhật Compose state.
+                 */
+                val mainHandler =
+                    remember {
+                        Handler(
+                            Looper.getMainLooper()
+                        )
+                    }
+
+                /*
+                 * BleManager thật:
+                 *
+                 * - Bấm Connect BLE sẽ gọi startScan().
+                 * - Khi tìm thấy ESP32_BLE, BleManager sẽ tự connect.
+                 * - Khi bật được notification, dữ liệu thô sẽ đi vào
+                 *   onDataReceived dưới dạng ByteArray.
+                 *
+                 * Hiện tại onDataReceived mới log kích thước raw bytes,
+                 * chưa nối vào PacketParser để tránh trộn dữ liệu BLE thật
+                 * với FakeBleSource khi đang kiểm thử giao diện.
+                 */
+                val bleManager =
+                    remember {
+                        BleManager(
+                            context = context,
+                            onDataReceived = { bytes ->
+                                Log.d(
+                                    "BLE_RAW_TEST",
+                                    "BLE raw notification: ${bytes.size} bytes"
+                                )
+                            },
+                            onStateChanged = { state ->
+                                mainHandler.post {
+                                    bleStatusText =
+                                        when (state) {
+                                            BleConnectionState.Idle ->
+                                                "BLE idle"
+
+                                            BleConnectionState.Scanning ->
+                                                "BLE scanning: ESP32_BLE"
+
+                                            BleConnectionState.Connecting ->
+                                                "BLE connecting"
+
+                                            BleConnectionState.Connected ->
+                                                "BLE connected"
+
+                                            BleConnectionState.Ready ->
+                                                "BLE ready: notifications enabled"
+
+                                            BleConnectionState.Disconnected ->
+                                                "BLE disconnected"
+
+                                            is BleConnectionState.Error ->
+                                                "BLE error: ${state.message}"
+                                        }
+                                }
+                            }
+                        )
+                    }
+
+                /*
+                 * Khi Activity bị đóng, dừng scan và ngắt kết nối BLE
+                 * để tránh rò tài nguyên BluetoothGatt.
+                 */
+                DisposableEffect(Unit) {
+                    onDispose {
+                        bleManager.disconnect()
+                    }
+                }
 
                 val ecgBuffer = remember {
                     SignalRingBuffer(capacity = 2000)
@@ -445,15 +523,25 @@ class MainActivity : ComponentActivity() {
                         showStatistics = false
                     },
                     onConnectBle = {
-                        /*
-                         * Bước hiện tại chỉ kiểm tra và xin quyền BLE.
-                         * Chưa gọi BleManager.startScan() để tránh ảnh hưởng
-                         * pipeline test FakeBleSource đang chạy ổn.
-                         */
                         if (hasBlePermissions(context)) {
                             blePermissionGranted = true
-                            bleStatusText = "BLE permission: granted"
+                            bleStatusText = "BLE scan requested"
+
+                            /*
+                             * BLE thật:
+                             * Sau khi đã có runtime permission, bắt đầu quét
+                             * để tìm thiết bị có tên ESP32_BLE.
+                             *
+                             * Lưu ý:
+                             * - FakeBleSource vẫn tiếp tục chạy để không làm hỏng
+                             *   pipeline kiểm thử hiện tại.
+                             * - Dữ liệu BLE thật hiện mới được log raw size ở
+                             *   tag BLE_RAW_TEST, chưa đưa vào waveform.
+                             */
+                            bleManager.startScan()
                         } else {
+                            bleStatusText = "BLE permission: requesting..."
+
                             blePermissionLauncher.launch(
                                 requiredBlePermissions()
                             )

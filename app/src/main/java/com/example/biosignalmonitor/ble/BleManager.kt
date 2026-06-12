@@ -6,6 +6,8 @@
  *
  * - Kiểm tra khả năng hỗ trợ Bluetooth trên thiết bị Android.
  * - Quản lý trạng thái kết nối BLE.
+ * - Quét thiết bị BLE đang phát quảng bá.
+ * - Tìm đúng thiết bị ESP32 theo tên ESP32_BLE.
  * - Kết nối tới thiết bị ESP32.
  * - Yêu cầu MTU phù hợp với packet Audio và Bio.
  * - Khám phá BLE service và characteristic.
@@ -16,9 +18,6 @@
  * File này không giải mã packet, không ghép Audio/Bio packet,
  * không lưu RingBuffer và không trực tiếp cập nhật giao diện.
  *
- * Hiện tại các hàm scan và connect thật chưa được kích hoạt để tránh
- * ảnh hưởng đến luồng kiểm thử bằng FakeBleSource.
- *
  * Copyright (c) 2026 Nguyen Dang Khanh
  * 10/6/2026
  * SPDX-License-Identifier: MIT
@@ -28,12 +27,18 @@ package com.example.biosignalmonitor.ble
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import java.util.UUID
 
@@ -108,6 +113,69 @@ class BleManager(
 
     private var bluetoothGatt: BluetoothGatt? = null
 
+    private var isScanning = false
+
+    /**
+     * Callback scan BLE.
+     *
+     * Khi tìm thấy thiết bị có tên ESP32_BLE, app sẽ dừng scan
+     * và bắt đầu kết nối tới thiết bị đó.
+     */
+    private val scanCallback =
+        object : ScanCallback() {
+
+            @SuppressLint("MissingPermission")
+            override fun onScanResult(
+                callbackType: Int,
+                result: ScanResult
+            ) {
+                super.onScanResult(
+                    callbackType,
+                    result
+                )
+
+                val device =
+                    result.device
+
+                val deviceName =
+                    result.scanRecord?.deviceName
+                        ?: device.name
+                        ?: "Unknown"
+
+                Log.d(
+                    TAG,
+                    "Found BLE device: name=$deviceName, address=${device.address}, rssi=${result.rssi}"
+                )
+
+                if (deviceName == TARGET_DEVICE_NAME) {
+                    Log.d(
+                        TAG,
+                        "Target device found: $TARGET_DEVICE_NAME"
+                    )
+
+                    stopScan()
+                    connectToDevice(device)
+                }
+            }
+
+            override fun onScanFailed(errorCode: Int) {
+                super.onScanFailed(errorCode)
+
+                isScanning = false
+
+                Log.e(
+                    TAG,
+                    "BLE scan failed: errorCode=$errorCode"
+                )
+
+                onStateChanged(
+                    BleConnectionState.Error(
+                        "BLE scan failed: $errorCode"
+                    )
+                )
+            }
+        }
+
     /**
      * Trả về true nếu điện thoại có Bluetooth adapter.
      */
@@ -123,78 +191,167 @@ class BleManager(
     }
 
     /**
-     * Khung hàm scan BLE.
+     * Bắt đầu quét BLE để tìm thiết bị ESP32_BLE.
      *
-     * Hiện tại chưa triển khai để không ảnh hưởng luồng FakeBleSource.
+     * Lưu ý:
+     * - Hàm này giả định MainActivity đã kiểm tra runtime permission.
+     * - Với Android 10, điện thoại thường cần bật Location để scan BLE.
      */
+    @SuppressLint("MissingPermission")
     fun startScan() {
+        val adapter =
+            bluetoothAdapter
+
+        if (adapter == null) {
+            Log.e(
+                TAG,
+                "Bluetooth is not supported"
+            )
+
+            onStateChanged(
+                BleConnectionState.Error(
+                    "Bluetooth is not supported"
+                )
+            )
+
+            return
+        }
+
+        if (!adapter.isEnabled) {
+            Log.e(
+                TAG,
+                "Bluetooth is disabled"
+            )
+
+            onStateChanged(
+                BleConnectionState.Error(
+                    "Bluetooth is disabled"
+                )
+            )
+
+            return
+        }
+
+        val scanner =
+            adapter.bluetoothLeScanner
+
+        if (scanner == null) {
+            Log.e(
+                TAG,
+                "BluetoothLeScanner is null"
+            )
+
+            onStateChanged(
+                BleConnectionState.Error(
+                    "BluetoothLeScanner is null"
+                )
+            )
+
+            return
+        }
+
+        if (isScanning) {
+            Log.d(
+                TAG,
+                "BLE scan is already running"
+            )
+
+            return
+        }
+
+        val scanSettings =
+            ScanSettings.Builder()
+                .setScanMode(
+                    ScanSettings.SCAN_MODE_LOW_LATENCY
+                )
+                .build()
+
         Log.d(
             TAG,
-            "BLE scan is not enabled yet"
+            "BLE scan started, target=$TARGET_DEVICE_NAME"
         )
+
+        isScanning = true
 
         onStateChanged(
             BleConnectionState.Scanning
         )
 
-        /*
-         * TODO BLE thật:
-         *
-         * 1. Lấy BluetoothLeScanner.
-         * 2. Tạo ScanCallback.
-         * 3. Lọc theo tên thiết bị hoặc Service UUID.
-         * 4. Khi tìm thấy ESP32 thì dừng scan.
-         * 5. Gọi connectGatt().
-         *
-         * Không thêm code thật ở đây cho đến khi có:
-         * - BLE device name
-         * - Service UUID
-         * - Notify characteristic UUID
-         */
+        scanner.startScan(
+            null,
+            scanSettings,
+            scanCallback
+        )
     }
 
     /**
      * Dừng quá trình scan BLE.
      */
+    @SuppressLint("MissingPermission")
     fun stopScan() {
-        Log.d(
-            TAG,
-            "BLE scan stop requested"
+        if (!isScanning) {
+            return
+        }
+
+        val scanner =
+            bluetoothAdapter?.bluetoothLeScanner
+
+        scanner?.stopScan(
+            scanCallback
         )
 
-        /*
-         * TODO BLE thật:
-         * bluetoothAdapter
-         *     ?.bluetoothLeScanner
-         *     ?.stopScan(scanCallback)
-         */
+        isScanning = false
+
+        Log.d(
+            TAG,
+            "BLE scan stopped"
+        )
     }
 
     /**
-     * Tạm thời chưa kết nối tới thiết bị thật.
+     * Hàm connect công khai tạm giữ lại để dùng về sau.
      *
-     * Hàm này sẽ được triển khai khi đã có BluetoothDevice từ ScanCallback.
+     * Hiện luồng connect thật được gọi tự động sau khi scan tìm thấy
+     * BluetoothDevice đúng tên ESP32_BLE.
      */
     fun connect() {
         Log.d(
             TAG,
-            "BLE connect is not enabled yet"
+            "Use startScan() to find and connect target BLE device"
+        )
+    }
+
+    /**
+     * Kết nối tới thiết bị BLE đã tìm thấy.
+     */
+    @SuppressLint("MissingPermission")
+    private fun connectToDevice(
+        device: BluetoothDevice
+    ) {
+        Log.d(
+            TAG,
+            "Connecting to ${device.name ?: TARGET_DEVICE_NAME}, address=${device.address}"
         )
 
         onStateChanged(
             BleConnectionState.Connecting
         )
 
-        /*
-         * TODO BLE thật:
-         *
-         * bluetoothGatt = device.connectGatt(
-         *     applicationContext,
-         *     false,
-         *     gattCallback,
-         *     BluetoothDevice.TRANSPORT_LE
-         * )
-         */
+        bluetoothGatt =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                device.connectGatt(
+                    applicationContext,
+                    false,
+                    gattCallback,
+                    BluetoothDevice.TRANSPORT_LE
+                )
+            } else {
+                device.connectGatt(
+                    applicationContext,
+                    false,
+                    gattCallback
+                )
+            }
     }
 
     /**
@@ -202,6 +359,8 @@ class BleManager(
      */
     @SuppressLint("MissingPermission")
     fun disconnect() {
+        stopScan()
+
         bluetoothGatt?.disconnect()
         bluetoothGatt?.close()
         bluetoothGatt = null
@@ -218,12 +377,11 @@ class BleManager(
 
     /**
      * Callback nền của Android BLE.
-     *
-     * Hiện được khai báo sẵn nhưng chưa được dùng cho kết nối thật.
      */
     private val gattCallback =
         object : BluetoothGattCallback() {
 
+            @SuppressLint("MissingPermission")
             override fun onConnectionStateChange(
                 gatt: BluetoothGatt,
                 status: Int,
@@ -235,20 +393,77 @@ class BleManager(
                     newState
                 )
 
-                /*
-                 * TODO BLE thật:
-                 *
-                 * Khi newState là STATE_CONNECTED:
-                 * - lưu bluetoothGatt
-                 * - cập nhật Connected
-                 * - requestMtu(247)
-                 * - discoverServices()
-                 *
-                 * Khi STATE_DISCONNECTED:
-                 * - cập nhật Disconnected
-                 */
+                Log.d(
+                    TAG,
+                    "Connection state changed: status=$status, newState=$newState"
+                )
+
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    Log.e(
+                        TAG,
+                        "GATT connection error: status=$status"
+                    )
+
+                    onStateChanged(
+                        BleConnectionState.Error(
+                            "GATT connection error: $status"
+                        )
+                    )
+
+                    gatt.close()
+                    bluetoothGatt = null
+                    return
+                }
+
+                when (newState) {
+                    BluetoothProfile.STATE_CONNECTED -> {
+                        bluetoothGatt = gatt
+
+                        Log.d(
+                            TAG,
+                            "BLE connected"
+                        )
+
+                        onStateChanged(
+                            BleConnectionState.Connected
+                        )
+
+                        val mtuRequestStarted =
+                            gatt.requestMtu(TARGET_MTU)
+
+                        Log.d(
+                            TAG,
+                            "Request MTU $TARGET_MTU started=$mtuRequestStarted"
+                        )
+
+                        if (!mtuRequestStarted) {
+                            Log.w(
+                                TAG,
+                                "MTU request failed to start, discovering services directly"
+                            )
+
+                            gatt.discoverServices()
+                        }
+                    }
+
+                    BluetoothProfile.STATE_DISCONNECTED -> {
+                        Log.d(
+                            TAG,
+                            "BLE disconnected from device"
+                        )
+
+                        bluetoothGatt = null
+
+                        onStateChanged(
+                            BleConnectionState.Disconnected
+                        )
+
+                        gatt.close()
+                    }
+                }
             }
 
+            @SuppressLint("MissingPermission")
             override fun onMtuChanged(
                 gatt: BluetoothGatt,
                 mtu: Int,
@@ -266,11 +481,10 @@ class BleManager(
                 )
 
                 /*
-                 * TODO BLE thật:
-                 *
-                 * Sau khi MTU thay đổi thành công:
-                 * gatt.discoverServices()
+                 * Dù MTU có thể không đạt 247 trên một số máy,
+                 * vẫn thử discover service để xem thiết bị có sẵn sàng không.
                  */
+                gatt.discoverServices()
             }
 
             override fun onServicesDiscovered(
@@ -287,22 +501,84 @@ class BleManager(
                     "Services discovered: status=$status"
                 )
 
-                /*
-                 * TODO BLE thật:
-                 *
-                 * val service =
-                 *     gatt.getService(SERVICE_UUID)
-                 *
-                 * val characteristic =
-                 *     service?.getCharacteristic(
-                 *         NOTIFY_CHARACTERISTIC_UUID
-                 *     )
-                 *
-                 * enableNotifications(
-                 *     gatt,
-                 *     characteristic
-                 * )
-                 */
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    onStateChanged(
+                        BleConnectionState.Error(
+                            "Service discovery failed: $status"
+                        )
+                    )
+
+                    return
+                }
+
+                val service =
+                    gatt.getService(
+                        SERVICE_UUID
+                    )
+
+                if (service == null) {
+                    Log.e(
+                        TAG,
+                        "Target service not found: $SERVICE_UUID"
+                    )
+
+                    onStateChanged(
+                        BleConnectionState.Error(
+                            "Target service not found"
+                        )
+                    )
+
+                    return
+                }
+
+                val characteristic =
+                    service.getCharacteristic(
+                        NOTIFY_CHARACTERISTIC_UUID
+                    )
+
+                if (characteristic == null) {
+                    Log.e(
+                        TAG,
+                        "Notify characteristic not found: $NOTIFY_CHARACTERISTIC_UUID"
+                    )
+
+                    onStateChanged(
+                        BleConnectionState.Error(
+                            "Notify characteristic not found"
+                        )
+                    )
+
+                    return
+                }
+
+                val properties =
+                    characteristic.properties
+
+                val supportsNotify =
+                    properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0
+
+                val supportsIndicate =
+                    properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
+
+                Log.d(
+                    TAG,
+                    "Characteristic properties: notify=$supportsNotify, indicate=$supportsIndicate"
+                )
+
+                if (!supportsNotify && !supportsIndicate) {
+                    onStateChanged(
+                        BleConnectionState.Error(
+                            "Characteristic does not support notify/indicate"
+                        )
+                    )
+
+                    return
+                }
+
+                enableNotifications(
+                    gatt,
+                    characteristic
+                )
             }
 
             override fun onCharacteristicChanged(
@@ -337,9 +613,7 @@ class BleManager(
         }
 
     /**
-     * Bật notification cho characteristic.
-     *
-     * Hàm đã được chuẩn bị nhưng chưa gọi khi chưa có UUID thật.
+     * Bật notification hoặc indication cho characteristic.
      */
     @SuppressLint("MissingPermission")
     private fun enableNotifications(
@@ -377,8 +651,18 @@ class BleManager(
             return
         }
 
+        val properties =
+            characteristic.properties
+
+        val supportsNotify =
+            properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0
+
         descriptor.value =
-            BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            if (supportsNotify) {
+                BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            } else {
+                BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+            }
 
         val writeStarted =
             gatt.writeDescriptor(descriptor)
