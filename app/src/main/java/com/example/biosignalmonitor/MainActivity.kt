@@ -19,6 +19,14 @@
  */
 package com.example.biosignalmonitor
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -182,6 +190,44 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BioSignalMonitorTheme {
+
+                val context =
+                    LocalContext.current
+
+                var blePermissionGranted by remember {
+                    mutableStateOf(
+                        hasBlePermissions(context)
+                    )
+                }
+
+                var bleStatusText by remember {
+                    mutableStateOf(
+                        if (blePermissionGranted) {
+                            "BLE permission: granted"
+                        } else {
+                            "BLE permission: not granted"
+                        }
+                    )
+                }
+
+                val blePermissionLauncher =
+                    rememberLauncherForActivityResult(
+                        ActivityResultContracts.RequestMultiplePermissions()
+                    ) { result ->
+
+                        blePermissionGranted =
+                            result.values.all { granted ->
+                                granted
+                            }
+
+                        bleStatusText =
+                            if (blePermissionGranted) {
+                                "BLE permission: granted"
+                            } else {
+                                "BLE permission: denied"
+                            }
+                    }
+
                 val ecgBuffer = remember {
                     SignalRingBuffer(capacity = 2000)
                 }
@@ -370,6 +416,7 @@ class MainActivity : ComponentActivity() {
                     ecgBufferSize = ecgBuffer.size(),
                     ppgBufferSize = ppgBuffer.size(),
                     pcgBufferSize = pcgBuffer.size(),
+                    bleStatusText = bleStatusText,
                     isPaused = isPaused,
                     showStatistics = showStatistics,
                     onPauseToggle = {
@@ -396,6 +443,21 @@ class MainActivity : ComponentActivity() {
                     },
                     onCloseStatistics = {
                         showStatistics = false
+                    },
+                    onConnectBle = {
+                        /*
+                         * Bước hiện tại chỉ kiểm tra và xin quyền BLE.
+                         * Chưa gọi BleManager.startScan() để tránh ảnh hưởng
+                         * pipeline test FakeBleSource đang chạy ổn.
+                         */
+                        if (hasBlePermissions(context)) {
+                            blePermissionGranted = true
+                            bleStatusText = "BLE permission: granted"
+                        } else {
+                            blePermissionLauncher.launch(
+                                requiredBlePermissions()
+                            )
+                        }
                     }
                 )
             }
@@ -415,12 +477,14 @@ fun BioSignalDashboard(
     ecgBufferSize: Int,
     ppgBufferSize: Int,
     pcgBufferSize: Int,
+    bleStatusText: String,
     isPaused: Boolean,
     showStatistics: Boolean,
     onPauseToggle: () -> Unit,
     onReset: () -> Unit,
     onShowStatistics: () -> Unit,
-    onCloseStatistics: () -> Unit
+    onCloseStatistics: () -> Unit,
+    onConnectBle: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -436,7 +500,8 @@ fun BioSignalDashboard(
         ) {
             DashboardHeader(
                 sequence = sequence,
-                timestamp = timestamp
+                timestamp = timestamp,
+                bleStatusText = bleStatusText
             )
 
             SignalCard(
@@ -470,7 +535,8 @@ fun BioSignalDashboard(
                 isPaused = isPaused,
                 onPauseToggle = onPauseToggle,
                 onReset = onReset,
-                onShowStatistics = onShowStatistics
+                onShowStatistics = onShowStatistics,
+                onConnectBle = onConnectBle
             )
         }
     }
@@ -484,6 +550,7 @@ fun BioSignalDashboard(
             ecgBufferSize = ecgBufferSize,
             ppgBufferSize = ppgBufferSize,
             pcgBufferSize = pcgBufferSize,
+            bleStatusText = bleStatusText,
             onDismiss = onCloseStatistics
         )
     }
@@ -492,7 +559,8 @@ fun BioSignalDashboard(
 @Composable
 fun DashboardHeader(
     sequence: Int,
-    timestamp: Long
+    timestamp: Long,
+    bleStatusText: String
 ) {
     Row(
         modifier = Modifier
@@ -509,7 +577,7 @@ fun DashboardHeader(
         Spacer(modifier = Modifier.width(16.dp))
 
         Text(
-            text = "● SIMULATION",
+            text = "● SIMULATION | $bleStatusText",
             color = SimulationColor,
             fontSize = 14.sp
         )
@@ -578,7 +646,7 @@ fun SignalCard(
                 )
 
                 Text(
-                    text = "${samples.size}/500 samples",
+                    text = "${samples.size}/2000 samples",
                     color = SecondaryText,
                     fontSize = 11.sp
                 )
@@ -600,7 +668,8 @@ fun ControlBar(
     isPaused: Boolean,
     onPauseToggle: () -> Unit,
     onReset: () -> Unit,
-    onShowStatistics: () -> Unit
+    onShowStatistics: () -> Unit,
+    onConnectBle: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -636,8 +705,8 @@ fun ControlBar(
         Spacer(modifier = Modifier.weight(1f))
 
         OutlinedButton(
-            onClick = {},
-            enabled = false
+            onClick = onConnectBle,
+            enabled = true
         ) {
             Text("Connect BLE")
         }
@@ -660,6 +729,7 @@ fun StatisticsDialog(
     ecgBufferSize: Int,
     ppgBufferSize: Int,
     pcgBufferSize: Int,
+    bleStatusText: String,
     onDismiss: () -> Unit
 ) {
     val scrollState = rememberScrollState()
@@ -680,7 +750,7 @@ fun StatisticsDialog(
             ) {
                 Text("=== Mode ===")
                 Text("Mode: Simulation")
-                Text("BLE status: Not connected")
+                Text("BLE status: $bleStatusText")
 
                 Text("")
                 Text("=== Packet Format ===")
@@ -735,4 +805,44 @@ fun formatTime(timestampMs: Long): String {
         seconds,
         milliseconds
     )
+}
+
+/**
+ * Trả về danh sách quyền BLE cần xin theo từng phiên bản Android.
+ *
+ * Android 12 trở lên:
+ * - BLUETOOTH_SCAN để quét thiết bị BLE.
+ * - BLUETOOTH_CONNECT để kết nối và giao tiếp BLE.
+ *
+ * Android 11 trở xuống:
+ * - ACCESS_FINE_LOCATION thường cần thiết để scan BLE.
+ */
+private fun requiredBlePermissions(): Array<String> {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        arrayOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT
+        )
+    } else {
+        arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION
+        )
+    }
+}
+
+/**
+ * Kiểm tra app đã được cấp đủ quyền BLE cần thiết hay chưa.
+ *
+ * Hàm này chỉ kiểm tra quyền, chưa scan BLE thật.
+ * Khi bấm Connect BLE, nếu chưa đủ quyền thì app sẽ hiện hộp thoại xin quyền.
+ */
+private fun hasBlePermissions(
+    context: Context
+): Boolean {
+    return requiredBlePermissions().all { permission ->
+        ContextCompat.checkSelfPermission(
+            context,
+            permission
+        ) == PackageManager.PERMISSION_GRANTED
+    }
 }
