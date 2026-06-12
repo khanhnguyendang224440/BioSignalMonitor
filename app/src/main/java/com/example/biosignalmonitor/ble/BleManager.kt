@@ -71,37 +71,24 @@ class BleManager(
     private val onDataReceived: (ByteArray) -> Unit,
     private val onStateChanged: (BleConnectionState) -> Unit
 ) {
-
     companion object {
         private const val TAG = "BLE_MANAGER"
 
-        /**
-         * MTU mục tiêu.
-         *
-         * ATT payload notification tối đa thường bằng MTU - 3.
-         * Khi MTU = 247, payload dự kiến là 244 byte.
-         */
+        const val TARGET_DEVICE_NAME =
+            "ESP32_BLE"
+
         const val TARGET_MTU = 247
 
-        /*
-         * TODO:
-         * Thay các UUID mẫu bên dưới bằng UUID thật từ code ESP32.
-         *
-         * Không mở comment hoặc sử dụng kết nối thật cho đến khi
-         * xác nhận UUID từ phía ESP32.
-         */
-
-        /*
         val SERVICE_UUID: UUID =
-            UUID.fromString("00000000-0000-0000-0000-000000000000")
+            UUID.fromString(
+                "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+            )
 
         val NOTIFY_CHARACTERISTIC_UUID: UUID =
-            UUID.fromString("00000000-0000-0000-0000-000000000000")
-        */
+            UUID.fromString(
+                "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
+            )
 
-        /**
-         * UUID chuẩn dùng để bật notification.
-         */
         private val CLIENT_CHARACTERISTIC_CONFIG_UUID: UUID =
             UUID.fromString(
                 "00002902-0000-1000-8000-00805f9b34fb"
