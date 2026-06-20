@@ -2,19 +2,14 @@
  * @file MainActivity.kt
  * @brief Quản lý màn hình chính của ứng dụng BioSignalMonitor.
  *
- * File này xây dựng giao diện dashboard dùng để hiển thị waveform ECG,
- * PPG và PCG, đồng thời quản lý các thao tác người dùng như tạm dừng,
- * tiếp tục, reset và xem thông số hệ thống.
+ * File này xây dựng dashboard hiển thị waveform ECG, PPG và PCG.
+ * Ứng dụng có hai chế độ:
  *
- * Trong giai đoạn hiện tại, MainActivity sử dụng dữ liệu giả lập để kiểm
- * thử giao diện. Logic nhận packet, giải mã và ghép dữ liệu sẽ được tách
- * sang các thành phần riêng trong tầng protocol và signal.
- *
- * MainActivity chỉ nên quản lý trạng thái giao diện và điều phối dữ liệu,
- * không trực tiếp xử lý cấu trúc binary packet BLE.
+ * - SIMULATION: dùng FakeBleSource để kiểm thử UI khi chưa có thiết bị thật.
+ * - BLE REALTIME: sau khi nhận packet BLE thật từ ESP32, tự dừng fake
+ *   và đưa dữ liệu thật vào PacketParser → PacketAssembler → RingBuffer → UI.
  *
  * Copyright (c) 2026 Nguyen Dang Khanh
- * 9/6/2026
  * SPDX-License-Identifier: MIT
  */
 package com.example.biosignalmonitor
@@ -23,16 +18,14 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -63,11 +56,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.example.biosignalmonitor.ble.BleConnectionState
 import com.example.biosignalmonitor.ble.BleManager
 import com.example.biosignalmonitor.fake.FakeBleSource
+import com.example.biosignalmonitor.protocol.BioSignalFrame
 import com.example.biosignalmonitor.protocol.PacketAssembler
 import com.example.biosignalmonitor.protocol.PacketParser
 import com.example.biosignalmonitor.protocol.ParsedBlePacket
@@ -84,125 +80,23 @@ private val EcgColor = Color(0xFF38E66B)
 private val PpgColor = Color(0xFFFF4D6D)
 private val PcgColor = Color(0xFF35C7FF)
 private val SimulationColor = Color(0xFFFFB020)
+private val BleColor = Color(0xFF38E66B)
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-//            // =========================================================
-//            // 1. Tạo hai packet giả theo đúng định dạng STM32/BLE
-//            // =========================================================
-//
-//            val audioBytes =
-//                FakeBleSource.makeAudioPacket(sequence = 10)
-//
-//            val bioBytes =
-//                FakeBleSource.makeBioPacket(sequence = 10)
-//
-//            // =========================================================
-//            // 2. Parse ByteArray thành Audio packet và Bio packet
-//            // =========================================================
-//
-//            val parsedAudio =
-//                PacketParser.parse(audioBytes)
-//
-//            val parsedBio =
-//                PacketParser.parse(bioBytes)
-//
-//            // =========================================================
-//            // 3. Kiểm tra kết quả PacketParser
-//            // =========================================================
-//
-//            if (parsedAudio is ParsedBlePacket.Audio) {
-//                Log.d(
-//                    "PARSER_TEST",
-//                    "Audio seq=${parsedAudio.sequence}, " +
-//                            "PCG count=${parsedAudio.pcg.size}"
-//                )
-//            } else {
-//                Log.e(
-//                    "PARSER_TEST",
-//                    "Audio packet parse failed"
-//                )
-//            }
-//
-//            if (parsedBio is ParsedBlePacket.Bio) {
-//                Log.d(
-//                    "PARSER_TEST",
-//                    "Bio seq=${parsedBio.sequence}, " +
-//                            "PPG count=${parsedBio.ppgIr.size}, " +
-//                            "ECG count=${parsedBio.ecg.size}"
-//                )
-//            } else {
-//                Log.e(
-//                    "PARSER_TEST",
-//                    "Bio packet parse failed"
-//                )
-//            }
-//
-//            // =========================================================
-//            // 4. Kiểm tra PacketAssembler
-//            // =========================================================
-//
-//            val packetAssembler = PacketAssembler()
-//
-//            val frameAfterAudio =
-//                parsedAudio?.let { packet ->
-//                    packetAssembler.push(packet)
-//                }
-//
-//            Log.d(
-//                "ASSEMBLER_TEST",
-//                "After Audio: frame=${frameAfterAudio != null}, " +
-//                        "pendingAudio=${packetAssembler.pendingAudioCount()}, " +
-//                        "pendingBio=${packetAssembler.pendingBioCount()}"
-//            )
-//
-//            val frameAfterBio =
-//                parsedBio?.let { packet ->
-//                    packetAssembler.push(packet)
-//                }
-//
-//            if (frameAfterBio != null) {
-//                Log.d(
-//                    "ASSEMBLER_TEST",
-//                    "Frame seq=${frameAfterBio.sequence}, " +
-//                            "ECG=${frameAfterBio.ecg.size}, " +
-//                            "PPG=${frameAfterBio.ppgIr.size}, " +
-//                            "PCG=${frameAfterBio.pcg.size}, " +
-//                            "valid=${frameAfterBio.isValid()}"
-//                )
-//
-//                Log.d(
-//                    "ASSEMBLER_TEST",
-//                    "audioRx=${packetAssembler.audioPacketsReceived}, " +
-//                            "bioRx=${packetAssembler.bioPacketsReceived}, " +
-//                            "completed=${packetAssembler.completedFrames}, " +
-//                            "incomplete=${packetAssembler.incompleteFrames}"
-//                )
-//            } else {
-//                Log.e(
-//                    "ASSEMBLER_TEST",
-//                    "Frame assembly failed"
-//                )
-//            }
-//
-//            // =========================================================
-//            // 5. Giao diện ứng dụng
-//
-//            // =========================================================
-
         setContent {
             BioSignalMonitorTheme {
+                val context = LocalContext.current
 
-                val context =
-                    LocalContext.current
+                val mainHandler = remember {
+                    Handler(Looper.getMainLooper())
+                }
 
                 var blePermissionGranted by remember {
-                    mutableStateOf(
-                        hasBlePermissions(context)
-                    )
+                    mutableStateOf(hasBlePermissions(context))
                 }
 
                 var bleStatusText by remember {
@@ -215,15 +109,28 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
+                var useBleMode by remember {
+                    mutableStateOf(false)
+                }
+
+                val modeText = if (useBleMode) {
+                    "BLE REALTIME"
+                } else {
+                    "SIMULATION"
+                }
+
+                val modeColor = if (useBleMode) {
+                    BleColor
+                } else {
+                    SimulationColor
+                }
+
                 val blePermissionLauncher =
                     rememberLauncherForActivityResult(
                         ActivityResultContracts.RequestMultiplePermissions()
                     ) { result ->
-
                         blePermissionGranted =
-                            result.values.all { granted ->
-                                granted
-                            }
+                            result.values.all { granted -> granted }
 
                         bleStatusText =
                             if (blePermissionGranted) {
@@ -233,226 +140,291 @@ class MainActivity : ComponentActivity() {
                             }
                     }
 
-                /*
-                 * Handler dùng để đưa callback BLE từ background thread
-                 * về main thread trước khi cập nhật Compose state.
-                 */
-                val mainHandler =
-                    remember {
-                        Handler(
-                            Looper.getMainLooper()
+                val ecgBuffer = remember { SignalRingBuffer(capacity = 2000) }
+                val ppgBuffer = remember { SignalRingBuffer(capacity = 2000) }
+                val pcgBuffer = remember { SignalRingBuffer(capacity = 2000) }
+
+                val realtimeAssembler = remember { PacketAssembler() }
+                val bleStreamAssembler = remember { BlePacketStreamAssembler() }
+
+                var ecgSamples by remember { mutableStateOf(FloatArray(0)) }
+                var ppgSamples by remember { mutableStateOf(FloatArray(0)) }
+                var pcgSamples by remember { mutableStateOf(FloatArray(0)) }
+
+                var currentSequence by remember { mutableStateOf(0) }
+                var currentTimestamp by remember { mutableStateOf(0L) }
+                var isPaused by remember { mutableStateOf(false) }
+                var showStatistics by remember { mutableStateOf(false) }
+
+                var packetCount by remember { mutableStateOf(0L) }
+                var parseErrorCount by remember { mutableStateOf(0L) }
+                var bleNotificationCount by remember { mutableStateOf(0L) }
+
+                fun clearRuntimeData() {
+                    ecgBuffer.clear()
+                    ppgBuffer.clear()
+                    pcgBuffer.clear()
+                    realtimeAssembler.clear()
+                    bleStreamAssembler.clear()
+
+                    ecgSamples = FloatArray(0)
+                    ppgSamples = FloatArray(0)
+                    pcgSamples = FloatArray(0)
+
+                    currentSequence = 0
+                    currentTimestamp = 0L
+                    packetCount = 0L
+                    parseErrorCount = 0L
+                    bleNotificationCount = 0L
+                }
+
+                fun pushFrameToUi(
+                    frame: BioSignalFrame,
+                    sourceTag: String
+                ) {
+                    if (!frame.isValid()) {
+                        parseErrorCount++
+                        Log.e(
+                            sourceTag,
+                            "Invalid frame: seq=${frame.sequence}, " +
+                                    "ecg=${frame.ecg.size}, " +
+                                    "ppg=${frame.ppgIr.size}, " +
+                                    "pcg=${frame.pcg.size}"
                         )
+                        return
                     }
 
-                /*
-                 * BleManager thật:
-                 *
-                 * - Bấm Connect BLE sẽ gọi startScan().
-                 * - Khi tìm thấy ESP32_BLE, BleManager sẽ tự connect.
-                 * - Khi bật được notification, dữ liệu thô sẽ đi vào
-                 *   onDataReceived dưới dạng ByteArray.
-                 *
-                 * Hiện tại onDataReceived mới log kích thước raw bytes,
-                 * chưa nối vào PacketParser để tránh trộn dữ liệu BLE thật
-                 * với FakeBleSource khi đang kiểm thử giao diện.
-                 */
-                val bleManager =
-                    remember {
-                        BleManager(
-                            context = context,
-                            onDataReceived = { bytes ->
-                                Log.d(
-                                    "BLE_RAW_TEST",
-                                    "BLE raw notification: ${bytes.size} bytes"
+                    ecgBuffer.pushSamples(frame.ecg)
+                    ppgBuffer.pushSamples(frame.ppgIr)
+                    pcgBuffer.pushSamples(frame.pcg)
+
+                    ecgSamples = ecgBuffer.snapshot()
+                    ppgSamples = ppgBuffer.snapshot()
+                    pcgSamples = pcgBuffer.snapshot()
+
+                    currentSequence = frame.sequence
+                    currentTimestamp += 32L
+
+                    if (realtimeAssembler.completedFrames % 50L == 0L) {
+                        Log.d(
+                            sourceTag,
+                            "frame=${realtimeAssembler.completedFrames}, " +
+                                    "seq=${frame.sequence}, " +
+                                    "audioRx=${realtimeAssembler.audioPacketsReceived}, " +
+                                    "bioRx=${realtimeAssembler.bioPacketsReceived}, " +
+                                    "incomplete=${realtimeAssembler.incompleteFrames}, " +
+                                    "parseErrors=$parseErrorCount, " +
+                                    "buffers=${ecgBuffer.size()}/" +
+                                    "${ppgBuffer.size()}/" +
+                                    "${pcgBuffer.size()}"
+                        )
+                    }
+                }
+
+                fun handleParsedPacket(
+                    parsedPacket: ParsedBlePacket,
+                    sourceTag: String
+                ) {
+                    packetCount++
+
+                    when (parsedPacket) {
+                        is ParsedBlePacket.Audio -> {
+                            if (parsedPacket.pcg.size != 32) {
+                                Log.w(
+                                    sourceTag,
+                                    "Audio sample count abnormal: " +
+                                            "seq=${parsedPacket.sequence}, " +
+                                            "pcg=${parsedPacket.pcg.size}"
                                 )
-                            },
-                            onStateChanged = { state ->
-                                mainHandler.post {
-                                    bleStatusText =
-                                        when (state) {
-                                            BleConnectionState.Idle ->
-                                                "BLE idle"
-
-                                            BleConnectionState.Scanning ->
-                                                "BLE scanning: ESP32_BLE"
-
-                                            BleConnectionState.Connecting ->
-                                                "BLE connecting"
-
-                                            BleConnectionState.Connected ->
-                                                "BLE connected"
-
-                                            BleConnectionState.Ready ->
-                                                "BLE ready: notifications enabled"
-
-                                            BleConnectionState.Disconnected ->
-                                                "BLE disconnected"
-
-                                            is BleConnectionState.Error ->
-                                                "BLE error: ${state.message}"
-                                        }
-                                }
                             }
-                        )
+                        }
+
+                        is ParsedBlePacket.Bio -> {
+                            if (parsedPacket.ecg.size != 32 || parsedPacket.ppgIr.size != 32) {
+                                Log.w(
+                                    sourceTag,
+                                    "Bio sample count abnormal: " +
+                                            "seq=${parsedPacket.sequence}, " +
+                                            "ecg=${parsedPacket.ecg.size}, " +
+                                            "ppg=${parsedPacket.ppgIr.size}"
+                                )
+                            }
+                        }
                     }
 
-                /*
-                 * Khi Activity bị đóng, dừng scan và ngắt kết nối BLE
-                 * để tránh rò tài nguyên BluetoothGatt.
-                 */
+                    val frame = realtimeAssembler.push(parsedPacket)
+
+                    if (frame != null) {
+                        pushFrameToUi(
+                            frame = frame,
+                            sourceTag = sourceTag
+                        )
+                    } else if (packetCount % 100L == 0L) {
+                        Log.d(
+                            sourceTag,
+                            "Waiting pair: " +
+                                    "pendingAudio=${realtimeAssembler.pendingAudioCount()}, " +
+                                    "pendingBio=${realtimeAssembler.pendingBioCount()}"
+                        )
+                    }
+                }
+
+                fun handleBleNotification(bytes: ByteArray) {
+                    bleNotificationCount++
+
+                    Log.d(
+                        "BLE_RAW_TEST",
+                        "Notification #$bleNotificationCount: ${bytes.size} bytes"
+                    )
+
+                    val completePackets =
+                        bleStreamAssembler.push(bytes)
+
+                    if (completePackets.isEmpty()) {
+                        Log.d(
+                            "BLE_STREAM",
+                            "Waiting more bytes, buffered=${bleStreamAssembler.bufferedSize()}"
+                        )
+                        return
+                    }
+
+                    if (!useBleMode) {
+                        Log.d(
+                            "BLE_PIPELINE",
+                            "First valid BLE packet received -> switch SIMULATION to BLE REALTIME"
+                        )
+
+                        useBleMode = true
+                        isPaused = false
+                        clearRuntimeData()
+                        bleStatusText = "BLE streaming: real packet received"
+                    }
+
+                    completePackets.forEach { packetBytes ->
+                        val parsedPacket =
+                            PacketParser.parse(packetBytes)
+
+                        if (parsedPacket == null) {
+                            parseErrorCount++
+                            Log.e(
+                                "BLE_PIPELINE",
+                                "PacketParser failed: " +
+                                        "size=${packetBytes.size}, " +
+                                        "head=${packetBytes.toHexPreview()}"
+                            )
+                            return@forEach
+                        }
+
+                        Log.d(
+                            "BLE_PIPELINE",
+                            "Parsed packet: " +
+                                    "type=${parsedPacket::class.simpleName}, " +
+                                    "seq=${parsedPacket.sequence}, " +
+                                    "size=${packetBytes.size}"
+                        )
+
+                        handleParsedPacket(
+                            parsedPacket = parsedPacket,
+                            sourceTag = "BLE_PIPELINE"
+                        )
+                    }
+                }
+
+                val bleManager = remember {
+                    BleManager(
+                        context = context,
+                        onDataReceived = { bytes ->
+                            mainHandler.post {
+                                handleBleNotification(bytes)
+                            }
+                        },
+                        onStateChanged = { state ->
+                            mainHandler.post {
+                                bleStatusText =
+                                    when (state) {
+                                        BleConnectionState.Idle ->
+                                            "BLE idle"
+
+                                        BleConnectionState.Scanning ->
+                                            "BLE scanning: ESP32_BLE"
+
+                                        BleConnectionState.Connecting ->
+                                            "BLE connecting"
+
+                                        BleConnectionState.Connected ->
+                                            "BLE connected: requesting MTU"
+
+                                        BleConnectionState.Ready ->
+                                            "BLE ready: waiting packets"
+
+                                        BleConnectionState.Disconnected -> {
+                                            if (useBleMode) {
+                                                Log.w(
+                                                    "BLE_PIPELINE",
+                                                    "BLE disconnected -> fallback to simulation"
+                                                )
+                                                useBleMode = false
+                                            }
+                                            "BLE disconnected"
+                                        }
+
+                                        is BleConnectionState.Error ->
+                                            "BLE error: ${state.message}"
+                                    }
+                            }
+                        }
+                    )
+                }
+
                 DisposableEffect(Unit) {
                     onDispose {
                         bleManager.disconnect()
                     }
                 }
 
-                val ecgBuffer = remember {
-                    SignalRingBuffer(capacity = 2000)
-                }
-
-                val ppgBuffer = remember {
-                    SignalRingBuffer(capacity = 2000)
-                }
-
-                val pcgBuffer = remember {
-                    SignalRingBuffer(capacity = 2000)
-                }
-
-                val realtimeAssembler = remember {
-                    PacketAssembler()
-                }
-
-                var ecgSamples by remember {
-                    mutableStateOf(FloatArray(0))
-                }
-
-                var ppgSamples by remember {
-                    mutableStateOf(FloatArray(0))
-                }
-
-                var pcgSamples by remember {
-                    mutableStateOf(FloatArray(0))
-                }
-
-                var currentSequence by remember {
-                    mutableStateOf(0)
-                }
-
-                var currentTimestamp by remember {
-                    mutableStateOf(0L)
-                }
-
-                var isPaused by remember {
-                    mutableStateOf(false)
-                }
-
-                var showStatistics by remember {
-                    mutableStateOf(false)
-                }
-
-                var packetCount by remember {
-                    mutableStateOf(0L)
-                }
-
-                var parseErrorCount by remember {
-                    mutableStateOf(0L)
-                }
-
                 LaunchedEffect(Unit) {
                     var sequence = 0
-                    var elapsedTimeMs = 0L
 
                     while (true) {
-                        if (!isPaused) {
-                            // =====================================================
-                            // 1. Giả lập hai BLE notification cùng sequence
-                            // =====================================================
-
+                        if (!isPaused && !useBleMode) {
                             val audioBytes =
                                 FakeBleSource.makeAudioPacket(sequence)
 
                             val bioBytes =
                                 FakeBleSource.makeBioPacket(sequence)
 
-                            // =====================================================
-                            // 2. Parse Audio packet
-                            // =====================================================
-
                             val parsedAudio =
                                 PacketParser.parse(audioBytes)
 
                             if (parsedAudio != null) {
-                                packetCount++
-
-                                val frameFromAudio =
-                                    realtimeAssembler.push(parsedAudio)
-
-                                /*
-                                 * Thông thường frameFromAudio sẽ null vì Bio packet
-                                 * của cùng sequence chưa được đưa vào assembler.
-                                 */
-                                if (frameFromAudio != null) {
-                                    ecgBuffer.pushSamples(frameFromAudio.ecg)
-                                    ppgBuffer.pushSamples(frameFromAudio.ppgIr)
-                                    pcgBuffer.pushSamples(frameFromAudio.pcg)
-
-                                    ecgSamples = ecgBuffer.snapshot()
-                                    ppgSamples = ppgBuffer.snapshot()
-                                    pcgSamples = pcgBuffer.snapshot()
-
-                                    currentSequence = frameFromAudio.sequence
-                                    elapsedTimeMs += 32L
-                                    currentTimestamp = elapsedTimeMs
-                                }
+                                handleParsedPacket(
+                                    parsedPacket = parsedAudio,
+                                    sourceTag = "REALTIME_TEST"
+                                )
                             } else {
                                 parseErrorCount++
-
                                 Log.e(
                                     "REALTIME_TEST",
                                     "Audio parse failed at seq=$sequence"
                                 )
                             }
 
-                            // =====================================================
-                            // 3. Parse Bio packet
-                            // =====================================================
-
                             val parsedBio =
                                 PacketParser.parse(bioBytes)
 
                             if (parsedBio != null) {
-                                packetCount++
-
-                                val frameFromBio =
-                                    realtimeAssembler.push(parsedBio)
-
-                                /*
-                                 * Sau khi Bio packet vào, assembler đã có cả Audio
-                                 * và Bio cùng sequence nên thường tạo frame tại đây.
-                                 */
-                                if (frameFromBio != null) {
-                                    ecgBuffer.pushSamples(frameFromBio.ecg)
-                                    ppgBuffer.pushSamples(frameFromBio.ppgIr)
-                                    pcgBuffer.pushSamples(frameFromBio.pcg)
-
-                                    ecgSamples = ecgBuffer.snapshot()
-                                    ppgSamples = ppgBuffer.snapshot()
-                                    pcgSamples = pcgBuffer.snapshot()
-
-                                    currentSequence = frameFromBio.sequence
-                                    elapsedTimeMs += 32L
-                                    currentTimestamp = elapsedTimeMs
-                                }
+                                handleParsedPacket(
+                                    parsedPacket = parsedBio,
+                                    sourceTag = "REALTIME_TEST"
+                                )
                             } else {
                                 parseErrorCount++
-
                                 Log.e(
                                     "REALTIME_TEST",
                                     "Bio parse failed at seq=$sequence"
                                 )
                             }
 
-                            // Chỉ log định kỳ để tránh làm chậm ứng dụng.
                             if (sequence % 50 == 0) {
                                 Log.d(
                                     "REALTIME_TEST",
@@ -468,17 +440,9 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
 
-                            /*
-                             * Sequence trong packet là uint8_t:
-                             * 0, 1, 2, ..., 255, sau đó quay về 0.
-                             */
                             sequence = (sequence + 1) and 0xFF
                         }
 
-                        /*
-                         * Mỗi block truyền có 32 mẫu ở tần số hiệu dụng 1000 Hz:
-                         * 32 / 1000 = 0,032 giây = 32 ms.
-                         */
                         delay(32L)
                     }
                 }
@@ -491,9 +455,12 @@ class MainActivity : ComponentActivity() {
                     timestamp = currentTimestamp,
                     packetCount = packetCount,
                     parseErrorCount = parseErrorCount,
+                    bleNotificationCount = bleNotificationCount,
                     ecgBufferSize = ecgBuffer.size(),
                     ppgBufferSize = ppgBuffer.size(),
                     pcgBufferSize = pcgBuffer.size(),
+                    modeText = modeText,
+                    modeColor = modeColor,
                     bleStatusText = bleStatusText,
                     isPaused = isPaused,
                     showStatistics = showStatistics,
@@ -501,20 +468,7 @@ class MainActivity : ComponentActivity() {
                         isPaused = !isPaused
                     },
                     onReset = {
-                        ecgBuffer.clear()
-                        ppgBuffer.clear()
-                        pcgBuffer.clear()
-
-                        realtimeAssembler.clear()
-
-                        ecgSamples = FloatArray(0)
-                        ppgSamples = FloatArray(0)
-                        pcgSamples = FloatArray(0)
-
-                        currentSequence = 0
-                        currentTimestamp = 0L
-                        packetCount = 0L
-                        parseErrorCount = 0L
+                        clearRuntimeData()
                     },
                     onShowStatistics = {
                         showStatistics = true
@@ -526,22 +480,13 @@ class MainActivity : ComponentActivity() {
                         if (hasBlePermissions(context)) {
                             blePermissionGranted = true
                             bleStatusText = "BLE scan requested"
-
-                            /*
-                             * BLE thật:
-                             * Sau khi đã có runtime permission, bắt đầu quét
-                             * để tìm thiết bị có tên ESP32_BLE.
-                             *
-                             * Lưu ý:
-                             * - FakeBleSource vẫn tiếp tục chạy để không làm hỏng
-                             *   pipeline kiểm thử hiện tại.
-                             * - Dữ liệu BLE thật hiện mới được log raw size ở
-                             *   tag BLE_RAW_TEST, chưa đưa vào waveform.
-                             */
+                            Log.d(
+                                "BLE_PIPELINE",
+                                "Connect BLE clicked -> startScan()"
+                            )
                             bleManager.startScan()
                         } else {
                             bleStatusText = "BLE permission: requesting..."
-
                             blePermissionLauncher.launch(
                                 requiredBlePermissions()
                             )
@@ -562,9 +507,12 @@ fun BioSignalDashboard(
     timestamp: Long,
     packetCount: Long,
     parseErrorCount: Long,
+    bleNotificationCount: Long,
     ecgBufferSize: Int,
     ppgBufferSize: Int,
     pcgBufferSize: Int,
+    modeText: String,
+    modeColor: Color,
     bleStatusText: String,
     isPaused: Boolean,
     showStatistics: Boolean,
@@ -589,6 +537,8 @@ fun BioSignalDashboard(
             DashboardHeader(
                 sequence = sequence,
                 timestamp = timestamp,
+                modeText = modeText,
+                modeColor = modeColor,
                 bleStatusText = bleStatusText
             )
 
@@ -635,9 +585,11 @@ fun BioSignalDashboard(
             timestamp = timestamp,
             packetCount = packetCount,
             parseErrorCount = parseErrorCount,
+            bleNotificationCount = bleNotificationCount,
             ecgBufferSize = ecgBufferSize,
             ppgBufferSize = ppgBufferSize,
             pcgBufferSize = pcgBufferSize,
+            modeText = modeText,
             bleStatusText = bleStatusText,
             onDismiss = onCloseStatistics
         )
@@ -648,6 +600,8 @@ fun BioSignalDashboard(
 fun DashboardHeader(
     sequence: Int,
     timestamp: Long,
+    modeText: String,
+    modeColor: Color,
     bleStatusText: String
 ) {
     Row(
@@ -665,8 +619,8 @@ fun DashboardHeader(
         Spacer(modifier = Modifier.width(16.dp))
 
         Text(
-            text = "● SIMULATION | $bleStatusText",
-            color = SimulationColor,
+            text = "● $modeText | $bleStatusText",
+            color = modeColor,
             fontSize = 14.sp
         )
 
@@ -814,9 +768,11 @@ fun StatisticsDialog(
     timestamp: Long,
     packetCount: Long,
     parseErrorCount: Long,
+    bleNotificationCount: Long,
     ecgBufferSize: Int,
     ppgBufferSize: Int,
     pcgBufferSize: Int,
+    modeText: String,
     bleStatusText: String,
     onDismiss: () -> Unit
 ) {
@@ -837,7 +793,7 @@ fun StatisticsDialog(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text("=== Mode ===")
-                Text("Mode: Simulation")
+                Text("Mode: $modeText")
                 Text("BLE status: $bleStatusText")
 
                 Text("")
@@ -858,7 +814,8 @@ fun StatisticsDialog(
                 Text("=== Runtime ===")
                 Text("Sequence: $sequence")
                 Text("Running time: ${formatTime(timestamp)}")
-                Text("Packets received: $packetCount")
+                Text("Parsed packets: $packetCount")
+                Text("BLE notifications: $bleNotificationCount")
                 Text("Parse errors: $parseErrorCount")
 
                 Text("")
@@ -896,14 +853,173 @@ fun formatTime(timestampMs: Long): String {
 }
 
 /**
+ * Gom stream BLE thành packet hoàn chỉnh.
+ *
+ * Dù ESP32 đang gửi được packet đủ 137/201 byte, Android vẫn nên có lớp này
+ * để bắt lỗi nếu notification bị tách nhỏ, dính nhiều packet hoặc lệch header.
+ */
+private class BlePacketStreamAssembler {
+    companion object {
+        private const val TAG = "BLE_STREAM"
+        private const val PKT_HEADER = 0xAA
+        private const val PKT_VERSION = 0x01
+        private const val PKT_FOOTER = 0x55
+        private const val PKT_TYPE_AUDIO = 0x01
+        private const val PKT_TYPE_BIO = 0x02
+        private const val HEADER_SIZE = 6
+        private const val FOOTER_SIZE = 3
+        private const val AUDIO_PAYLOAD_SIZE = 128
+        private const val BIO_PAYLOAD_SIZE = 192
+    }
+
+    private var buffer = ByteArray(0)
+
+    fun clear() {
+        buffer = ByteArray(0)
+    }
+
+    fun bufferedSize(): Int {
+        return buffer.size
+    }
+
+    fun push(incoming: ByteArray): List<ByteArray> {
+        if (incoming.isEmpty()) {
+            return emptyList()
+        }
+
+        buffer += incoming
+
+        val packets = mutableListOf<ByteArray>()
+
+        while (true) {
+            val headerIndex =
+                buffer.indexOfFirst { byte ->
+                    byte.toInt() and 0xFF == PKT_HEADER
+                }
+
+            if (headerIndex < 0) {
+                Log.w(
+                    TAG,
+                    "Drop ${buffer.size} bytes: no header 0xAA"
+                )
+                buffer = ByteArray(0)
+                break
+            }
+
+            if (headerIndex > 0) {
+                Log.w(
+                    TAG,
+                    "Drop $headerIndex bytes before header"
+                )
+                buffer = buffer.copyOfRange(
+                    headerIndex,
+                    buffer.size
+                )
+            }
+
+            if (buffer.size < HEADER_SIZE) {
+                break
+            }
+
+            val version = buffer[1].toInt() and 0xFF
+            val type = buffer[2].toInt() and 0xFF
+            val sequence = buffer[3].toInt() and 0xFF
+            val payloadLength =
+                (buffer[4].toInt() and 0xFF) or
+                        ((buffer[5].toInt() and 0xFF) shl 8)
+
+            val expectedPayloadLength =
+                when (type) {
+                    PKT_TYPE_AUDIO -> AUDIO_PAYLOAD_SIZE
+                    PKT_TYPE_BIO -> BIO_PAYLOAD_SIZE
+                    else -> -1
+                }
+
+            if (version != PKT_VERSION || expectedPayloadLength < 0 || payloadLength != expectedPayloadLength) {
+                Log.w(
+                    TAG,
+                    "Invalid header: " +
+                            "version=$version, " +
+                            "type=$type, " +
+                            "seq=$sequence, " +
+                            "payloadLength=$payloadLength, " +
+                            "preview=${buffer.toHexPreview()}"
+                )
+                buffer = buffer.copyOfRange(
+                    1,
+                    buffer.size
+                )
+                continue
+            }
+
+            val totalSize =
+                HEADER_SIZE + payloadLength + FOOTER_SIZE
+
+            if (buffer.size < totalSize) {
+                Log.d(
+                    TAG,
+                    "Incomplete packet: type=$type, seq=$sequence, " +
+                            "need=$totalSize, have=${buffer.size}"
+                )
+                break
+            }
+
+            val footer =
+                buffer[totalSize - 1].toInt() and 0xFF
+
+            if (footer != PKT_FOOTER) {
+                Log.w(
+                    TAG,
+                    "Invalid footer: type=$type, seq=$sequence, " +
+                            "footer=0x${footer.toString(16)}, " +
+                            "preview=${buffer.toHexPreview()}"
+                )
+                buffer = buffer.copyOfRange(
+                    1,
+                    buffer.size
+                )
+                continue
+            }
+
+            val packet =
+                buffer.copyOfRange(
+                    0,
+                    totalSize
+                )
+
+            packets.add(packet)
+
+            Log.d(
+                TAG,
+                "Complete packet extracted: type=$type, seq=$sequence, size=$totalSize"
+            )
+
+            buffer =
+                if (buffer.size == totalSize) {
+                    ByteArray(0)
+                } else {
+                    buffer.copyOfRange(
+                        totalSize,
+                        buffer.size
+                    )
+                }
+        }
+
+        return packets
+    }
+}
+
+private fun ByteArray.toHexPreview(
+    maxBytes: Int = 16
+): String {
+    return take(maxBytes)
+        .joinToString(" ") { byte ->
+            "%02X".format(byte.toInt() and 0xFF)
+        }
+}
+
+/**
  * Trả về danh sách quyền BLE cần xin theo từng phiên bản Android.
- *
- * Android 12 trở lên:
- * - BLUETOOTH_SCAN để quét thiết bị BLE.
- * - BLUETOOTH_CONNECT để kết nối và giao tiếp BLE.
- *
- * Android 11 trở xuống:
- * - ACCESS_FINE_LOCATION thường cần thiết để scan BLE.
  */
 private fun requiredBlePermissions(): Array<String> {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -920,9 +1036,6 @@ private fun requiredBlePermissions(): Array<String> {
 
 /**
  * Kiểm tra app đã được cấp đủ quyền BLE cần thiết hay chưa.
- *
- * Hàm này chỉ kiểm tra quyền, chưa scan BLE thật.
- * Khi bấm Connect BLE, nếu chưa đủ quyền thì app sẽ hiện hộp thoại xin quyền.
  */
 private fun hasBlePermissions(
     context: Context

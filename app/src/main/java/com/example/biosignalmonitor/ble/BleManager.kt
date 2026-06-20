@@ -80,7 +80,7 @@ class BleManager(
         private const val TAG = "BLE_MANAGER"
 
         const val TARGET_DEVICE_NAME =
-            "ESP32_BLE"
+            "ESP32_PERIPHERAL_PHUC"
 
         const val TARGET_MTU = 247
 
@@ -593,24 +593,67 @@ class BleManager(
                 val bytes =
                     characteristic.value ?: return
 
-                Log.d(
-                    TAG,
-                    "Notification received: ${bytes.size} bytes"
+                handleNotification(bytes)
+            }
+
+            override fun onDescriptorWrite(
+                gatt: BluetoothGatt,
+                descriptor: BluetoothGattDescriptor,
+                status: Int
+            ) {
+                super.onDescriptorWrite(
+                    gatt,
+                    descriptor,
+                    status
                 )
 
-                /*
-                 * Đây là đầu vào thật của pipeline:
-                 *
-                 * BLE ByteArray
-                 * → PacketParser
-                 * → PacketAssembler
-                 * → BioSignalFrame
-                 * → SignalRingBuffer
-                 * → UI
-                 */
-                onDataReceived(bytes)
+                Log.d(
+                    TAG,
+                    "Notification descriptor write: status=$status"
+                )
+
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    onStateChanged(
+                        BleConnectionState.Ready
+                    )
+
+                    Log.d(
+                        TAG,
+                        "BLE notifications enabled"
+                    )
+                } else {
+                    onStateChanged(
+                        BleConnectionState.Error(
+                            "Notification descriptor write failed: $status"
+                        )
+                    )
+                }
             }
         }
+
+    /**
+     * Xử lý dữ liệu nhận được từ BLE notification.
+     */
+    private fun handleNotification(
+        bytes: ByteArray
+    ) {
+        Log.d(
+            TAG,
+            "Notification received: ${bytes.size} bytes"
+        )
+
+        /*
+         * Đây là đầu vào thật của pipeline:
+         *
+         * BLE ByteArray
+         * → PacketParser
+         * → PacketAssembler
+         * → BioSignalFrame
+         * → SignalRingBuffer
+         * → UI
+         */
+        onDataReceived(bytes)
+    }
 
     /**
      * Bật notification hoặc indication cho characteristic.
@@ -677,13 +720,9 @@ class BleManager(
             return
         }
 
-        onStateChanged(
-            BleConnectionState.Ready
-        )
-
         Log.d(
             TAG,
-            "BLE notifications enabled"
+            "Notification descriptor write started"
         )
     }
 }
