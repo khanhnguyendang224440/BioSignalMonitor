@@ -60,6 +60,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.example.biosignalmonitor.analysis.VitalSignsAnalyzer
 import com.example.biosignalmonitor.ble.BleConnectionState
 import com.example.biosignalmonitor.ble.BleManager
 import com.example.biosignalmonitor.fake.FakeBleSource
@@ -146,6 +147,7 @@ class MainActivity : ComponentActivity() {
 
                 val realtimeAssembler = remember { PacketAssembler() }
                 val bleStreamAssembler = remember { BlePacketStreamAssembler() }
+                val vitalSignsAnalyzer = remember { VitalSignsAnalyzer(sampleRateHz = 1000) }
 
                 var ecgSamples by remember { mutableStateOf(FloatArray(0)) }
                 var ppgSamples by remember { mutableStateOf(FloatArray(0)) }
@@ -153,6 +155,10 @@ class MainActivity : ComponentActivity() {
 
                 var currentSequence by remember { mutableStateOf(0) }
                 var currentTimestamp by remember { mutableStateOf(0L) }
+                var globalSampleCounter by remember { mutableStateOf(0L) }
+                var currentHeartRateBpm by remember { mutableStateOf<Double?>(null) }
+                var currentPttMs by remember { mutableStateOf<Double?>(null) }
+                var analysisStatusText by remember { mutableStateOf("Waiting for ECG/PPG peaks") }
                 var isPaused by remember { mutableStateOf(false) }
                 var showStatistics by remember { mutableStateOf(false) }
 
@@ -166,6 +172,7 @@ class MainActivity : ComponentActivity() {
                     pcgBuffer.clear()
                     realtimeAssembler.clear()
                     bleStreamAssembler.clear()
+                    vitalSignsAnalyzer.reset()
 
                     ecgSamples = FloatArray(0)
                     ppgSamples = FloatArray(0)
@@ -173,6 +180,10 @@ class MainActivity : ComponentActivity() {
 
                     currentSequence = 0
                     currentTimestamp = 0L
+                    globalSampleCounter = 0L
+                    currentHeartRateBpm = null
+                    currentPttMs = null
+                    analysisStatusText = "Waiting for ECG/PPG peaks"
                     packetCount = 0L
                     parseErrorCount = 0L
                     bleNotificationCount = 0L
@@ -194,6 +205,19 @@ class MainActivity : ComponentActivity() {
                         return
                     }
 
+                    val blockStartSample = globalSampleCounter
+                    globalSampleCounter += frame.sampleCount.toLong()
+
+                    val vitalSigns = vitalSignsAnalyzer.processFrame(
+                        ecg = frame.ecg,
+                        ppgIr = frame.ppgIr,
+                        blockStartSample = blockStartSample
+                    )
+
+                    currentHeartRateBpm = vitalSigns.heartRateBpm
+                    currentPttMs = vitalSigns.pttMs
+                    analysisStatusText = vitalSigns.statusText
+
                     ecgBuffer.pushSamples(frame.ecg)
                     ppgBuffer.pushSamples(frame.ppgIr)
                     pcgBuffer.pushSamples(frame.pcg)
@@ -203,7 +227,7 @@ class MainActivity : ComponentActivity() {
                     pcgSamples = pcgBuffer.snapshot()
 
                     currentSequence = frame.sequence
-                    currentTimestamp += 32L
+                    currentTimestamp = globalSampleCounter
 
                     if (realtimeAssembler.completedFrames % 50L == 0L) {
                         Log.d(
@@ -276,6 +300,10 @@ class MainActivity : ComponentActivity() {
                         "BLE_RAW_TEST",
                         "Notification #$bleNotificationCount: ${bytes.size} bytes"
                     )
+
+                    if (isPaused) {
+                        return
+                    }
 
                     val completePackets =
                         bleStreamAssembler.push(bytes)
@@ -453,6 +481,9 @@ class MainActivity : ComponentActivity() {
                     pcg = pcgSamples,
                     sequence = currentSequence,
                     timestamp = currentTimestamp,
+                    heartRateBpm = currentHeartRateBpm,
+                    pttMs = currentPttMs,
+                    analysisStatusText = analysisStatusText,
                     packetCount = packetCount,
                     parseErrorCount = parseErrorCount,
                     bleNotificationCount = bleNotificationCount,
@@ -505,6 +536,9 @@ fun BioSignalDashboard(
     pcg: FloatArray,
     sequence: Int,
     timestamp: Long,
+    heartRateBpm: Double?,
+    pttMs: Double?,
+    analysisStatusText: String,
     packetCount: Long,
     parseErrorCount: Long,
     bleNotificationCount: Long,
@@ -542,9 +576,15 @@ fun BioSignalDashboard(
                 bleStatusText = bleStatusText
             )
 
+            VitalSignsPanel(
+                heartRateBpm = heartRateBpm,
+                pttMs = pttMs,
+                statusText = analysisStatusText
+            )
+
             SignalCard(
                 title = "ECG",
-                subtitle = "Electrocardiogram",
+                subtitle = "Điện tim",
                 sampleRate = "1000 Hz",
                 samples = ecg,
                 lineColor = EcgColor,
@@ -553,7 +593,7 @@ fun BioSignalDashboard(
 
             SignalCard(
                 title = "PPG",
-                subtitle = "Photoplethysmogram",
+                subtitle = "Mạch máu",
                 sampleRate = "1000 Hz",
                 samples = ppg,
                 lineColor = PpgColor,
@@ -562,7 +602,7 @@ fun BioSignalDashboard(
 
             SignalCard(
                 title = "PCG",
-                subtitle = "Phonocardiogram",
+                subtitle = "Âm tim",
                 sampleRate = "1000 Hz",
                 samples = pcg,
                 lineColor = PcgColor,
@@ -583,6 +623,9 @@ fun BioSignalDashboard(
         StatisticsDialog(
             sequence = sequence,
             timestamp = timestamp,
+            heartRateBpm = heartRateBpm,
+            pttMs = pttMs,
+            analysisStatusText = analysisStatusText,
             packetCount = packetCount,
             parseErrorCount = parseErrorCount,
             bleNotificationCount = bleNotificationCount,
@@ -639,6 +682,64 @@ fun DashboardHeader(
             color = SecondaryText,
             fontSize = 14.sp
         )
+    }
+}
+
+@Composable
+fun VitalSignsPanel(
+    heartRateBpm: Double?,
+    pttMs: Double?,
+    statusText: String
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 6.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = CardBackground
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            Column(
+                modifier = Modifier.width(125.dp)
+            ) {
+                Text(
+                    text = "Vital Signs",
+                    color = PrimaryText,
+                    fontSize = 17.sp
+                )
+                Text(
+                    text = statusText,
+                    color = SecondaryText,
+                    fontSize = 11.sp
+                )
+            }
+
+            Text(
+                text = "HR: ${formatHeartRate(heartRateBpm)}",
+                color = EcgColor,
+                fontSize = 18.sp
+            )
+
+            Text(
+                text = "PTT: ${formatPtt(pttMs)}",
+                color = PpgColor,
+                fontSize = 18.sp
+            )
+
+            Text(
+                text = "App analysis: ECG R-peak → PPG IR peak",
+                color = SecondaryText,
+                fontSize = 12.sp
+            )
+        }
     }
 }
 
@@ -766,6 +867,9 @@ fun ControlBar(
 fun StatisticsDialog(
     sequence: Int,
     timestamp: Long,
+    heartRateBpm: Double?,
+    pttMs: Double?,
+    analysisStatusText: String,
     packetCount: Long,
     parseErrorCount: Long,
     bleNotificationCount: Long,
@@ -819,6 +923,12 @@ fun StatisticsDialog(
                 Text("Parse errors: $parseErrorCount")
 
                 Text("")
+                Text("=== Vital Signs ===")
+                Text("HR: ${formatHeartRate(heartRateBpm)}")
+                Text("PTT: ${formatPtt(pttMs)}")
+                Text("Analysis: $analysisStatusText")
+
+                Text("")
                 Text("=== Ring Buffer ===")
                 Text("ECG buffer: $ecgBufferSize / 2000")
                 Text("PPG buffer: $ppgBufferSize / 2000")
@@ -833,6 +943,18 @@ fun StatisticsDialog(
             }
         }
     )
+}
+
+fun formatHeartRate(heartRateBpm: Double?): String {
+    return heartRateBpm?.let { value ->
+        "%.0f bpm".format(value)
+    } ?: "-- bpm"
+}
+
+fun formatPtt(pttMs: Double?): String {
+    return pttMs?.let { value ->
+        "%.0f ms".format(value)
+    } ?: "-- ms"
 }
 
 fun formatTime(timestampMs: Long): String {
