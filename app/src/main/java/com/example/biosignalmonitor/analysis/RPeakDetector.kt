@@ -44,7 +44,7 @@ class RPeakDetector(
         val mainAmplitude = max(maxPositive, maxNegativeAbs)
         if (mainAmplitude < 1.0 || std < 0.5) return emptyList()
 
-        val threshold = max(mainAmplitude * 0.55, std * 1.4)
+        val threshold = max(mainAmplitude * 0.35, std * 0.9)
         val peaks = mutableListOf<Long>()
 
         // Chỉ xử lý đến mẫu áp chót để có đủ láng giềng trái/phải.

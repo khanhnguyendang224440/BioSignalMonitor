@@ -18,6 +18,9 @@ class VitalSignsAnalyzer(
     private val ecgWindow = mutableListOf<IndexedSample>()
     private val ppgWindow = mutableListOf<IndexedSample>()
 
+    private val ecgFilter = SosIirFilter.ecgBandpass1000Hz()
+    private val ppgFilter = SosIirFilter.ppgBandpass1000Hz()
+
     private val rPeakDetector = RPeakDetector(sampleRateHz)
     private val ppgPeakDetector = PpgPeakDetector(sampleRateHz)
 
@@ -34,6 +37,9 @@ class VitalSignsAnalyzer(
         ppgWindow.clear()
         pendingRPeaks.clear()
         ppgPeakHistory.clear()
+
+        ecgFilter.reset()
+        ppgFilter.reset()
 
         rPeakDetector.reset()
         ppgPeakDetector.reset()
@@ -56,16 +62,19 @@ class VitalSignsAnalyzer(
 
         for (i in 0 until count) {
             val sampleIndex = blockStartSample + i.toLong()
+            val filteredEcg = ecgFilter.filter(ecg[i].toDouble())
+            val filteredPpg = ppgFilter.filter(ppgIr[i].toDouble())
+
             ecgWindow.add(
                 IndexedSample(
                     index = sampleIndex,
-                    value = ecg[i].toDouble()
+                    value = filteredEcg
                 )
             )
             ppgWindow.add(
                 IndexedSample(
                     index = sampleIndex,
-                    value = ppgIr[i].toDouble()
+                    value = filteredPpg
                 )
             )
         }

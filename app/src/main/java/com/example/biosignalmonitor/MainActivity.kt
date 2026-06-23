@@ -60,6 +60,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.example.biosignalmonitor.analysis.AppSignalFilters
 import com.example.biosignalmonitor.analysis.VitalSignsAnalyzer
 import com.example.biosignalmonitor.ble.BleConnectionState
 import com.example.biosignalmonitor.ble.BleManager
@@ -141,13 +142,14 @@ class MainActivity : ComponentActivity() {
                             }
                     }
 
-                val ecgBuffer = remember { SignalRingBuffer(capacity = 2000) }
-                val ppgBuffer = remember { SignalRingBuffer(capacity = 2000) }
-                val pcgBuffer = remember { SignalRingBuffer(capacity = 2000) }
+                val ecgBuffer = remember { SignalRingBuffer(capacity = 5000) }
+                val ppgBuffer = remember { SignalRingBuffer(capacity = 5000) }
+                val pcgBuffer = remember { SignalRingBuffer(capacity = 5000) }
 
                 val realtimeAssembler = remember { PacketAssembler() }
                 val bleStreamAssembler = remember { BlePacketStreamAssembler() }
                 val vitalSignsAnalyzer = remember { VitalSignsAnalyzer(sampleRateHz = 1000) }
+                val displaySignalFilters = remember { AppSignalFilters() }
 
                 var ecgSamples by remember { mutableStateOf(FloatArray(0)) }
                 var ppgSamples by remember { mutableStateOf(FloatArray(0)) }
@@ -174,6 +176,7 @@ class MainActivity : ComponentActivity() {
                     realtimeAssembler.clear()
                     bleStreamAssembler.clear()
                     vitalSignsAnalyzer.reset()
+                    displaySignalFilters.reset()
 
                     ecgSamples = FloatArray(0)
                     ppgSamples = FloatArray(0)
@@ -241,9 +244,15 @@ class MainActivity : ComponentActivity() {
                     currentPttMs = vitalSigns.pttMs
                     analysisStatusText = vitalSigns.statusText
 
-                    ecgBuffer.pushSamples(frame.ecg)
-                    ppgBuffer.pushSamples(frame.ppgIr)
-                    pcgBuffer.pushSamples(frame.pcg)
+                    // Tín hiệu đưa lên màn hình đã qua band-pass filter realtime.
+                    // Packet raw vẫn được giữ nguyên; HR/PTT được xử lý trong VitalSignsAnalyzer.
+                    val filteredEcgForDisplay = displaySignalFilters.filterEcg(frame.ecg)
+                    val filteredPpgForDisplay = displaySignalFilters.filterPpgIr(frame.ppgIr)
+                    val filteredPcgForDisplay = displaySignalFilters.filterPcg(frame.pcg)
+
+                    ecgBuffer.pushSamples(filteredEcgForDisplay)
+                    ppgBuffer.pushSamples(filteredPpgForDisplay)
+                    pcgBuffer.pushSamples(filteredPcgForDisplay)
 
                     ecgSamples = ecgBuffer.snapshot()
                     ppgSamples = ppgBuffer.snapshot()
@@ -612,7 +621,9 @@ fun BioSignalDashboard(
                 sampleRate = "1000 Hz",
                 samples = ecg,
                 lineColor = EcgColor,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                displayGain = 1.2f,
+                clipStd = 4.0f
             )
 
             SignalCard(
@@ -621,7 +632,9 @@ fun BioSignalDashboard(
                 sampleRate = "1000 Hz",
                 samples = ppg,
                 lineColor = PpgColor,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                displayGain = 0.8f,
+                clipStd = 3.5f
             )
 
             SignalCard(
@@ -630,7 +643,9 @@ fun BioSignalDashboard(
                 sampleRate = "1000 Hz",
                 samples = pcg,
                 lineColor = PcgColor,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                displayGain = 1.0f,
+                clipStd = 3.5f
             )
 
             ControlBar(
@@ -775,7 +790,9 @@ fun SignalCard(
     sampleRate: String,
     samples: FloatArray,
     lineColor: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    displayGain: Float = 1.0f,
+    clipStd: Float = 3.5f
 ) {
     Card(
         modifier = modifier
@@ -814,7 +831,7 @@ fun SignalCard(
                 )
 
                 Text(
-                    text = "${samples.size}/2000 samples",
+                    text = "${samples.size}/5000 samples",
                     color = SecondaryText,
                     fontSize = 11.sp
                 )
@@ -823,6 +840,8 @@ fun SignalCard(
             WaveformCanvas(
                 samples = samples,
                 lineColor = lineColor,
+                displayGain = displayGain,
+                clipStd = clipStd,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
@@ -957,9 +976,9 @@ fun StatisticsDialog(
 
                 Text("")
                 Text("=== Ring Buffer ===")
-                Text("ECG buffer: $ecgBufferSize / 2000")
-                Text("PPG buffer: $ppgBufferSize / 2000")
-                Text("PCG buffer: $pcgBufferSize / 2000")
+                Text("ECG buffer: $ecgBufferSize / 5000")
+                Text("PPG buffer: $ppgBufferSize / 5000")
+                Text("PCG buffer: $pcgBufferSize / 5000")
             }
         },
         confirmButton = {

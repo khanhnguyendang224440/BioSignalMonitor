@@ -76,6 +76,15 @@ class SignalRingBuffer(
     }
 
     /**
+     * Thêm mảng FloatArray đã qua lọc để hiển thị.
+     */
+    fun pushSamples(samples: FloatArray) {
+        for (sample in samples) {
+            push(sample)
+        }
+    }
+
+    /**
      * Trả về dữ liệu theo đúng thứ tự thời gian:
      * mẫu cũ nhất đứng trước, mẫu mới nhất đứng sau.
      */
