@@ -9,7 +9,7 @@
  *
  * Dữ liệu giả lập được đưa vào cùng luồng phân tích và xử lý với dữ liệu BLE thật.
  * Nhờ đó, ứng dụng có thể kiểm thử chức năng nhận packet, kiểm tra CRC,
- * phát hiện mất packet, hiển thị waveform và kiểm thử HR/PTT trước khi kết nối
+ * phát hiện mất packet, hiển thị waveform và kiểm thử HR/PAT trước khi kết nối
  * phần cứng STM32.
  *
  * Copyright (c) 2026 Nguyen Dang Khanh
@@ -41,7 +41,7 @@ object FakeBleSource {
 
     private const val FAKE_RR_SAMPLES = 800
     private const val FAKE_R_PEAK_OFFSET = 40
-    private const val FAKE_PTT_SAMPLES = 220
+    private const val FAKE_PAT_SAMPLES = 220
 
     const val AUDIO_PACKET_SIZE = HEADER_SIZE + AUDIO_PAYLOAD_SIZE + FOOTER_SIZE
     const val BIO_PACKET_SIZE = HEADER_SIZE + BIO_PAYLOAD_SIZE + FOOTER_SIZE
@@ -87,11 +87,11 @@ object FakeBleSource {
 
         // PPG IR[32] - uint32_t.
         // Tạo pulse PPG xuất hiện sau R-peak khoảng 220 ms
-        // để kiểm thử thuật toán PTT trên App mà không đổi format packet.
+        // để kiểm thử thuật toán PAT trên App mà không đổi format packet.
         for (i in 0 until SAMPLE_COUNT) {
             val globalSample = sequence * SAMPLE_COUNT + i
             val phase = positiveModulo(
-                globalSample - FAKE_R_PEAK_OFFSET - FAKE_PTT_SAMPLES,
+                globalSample - FAKE_R_PEAK_OFFSET - FAKE_PAT_SAMPLES,
                 FAKE_RR_SAMPLES
             )
 

@@ -1,10 +1,13 @@
 /**
  * @file VitalSignsAnalyzer.kt
- * @brief Lọc nhẹ, tìm đỉnh ECG/PPG và tính HR + PTT ở Android App.
+ * @brief Lọc nhẹ, tìm R-peak ECG, PPG foot và tính HR + PAT ở Android App.
  *
  * App giữ nguyên packet raw từ STM32. Vì STM32 đảm bảo ECG và PPG IR cùng
  * 1 kHz, block 32 mẫu liên tục và không mất mẫu, App tự tạo trục thời gian
  * bằng globalSampleCounter. Ở 1 kHz, một sample tương ứng 1 ms.
+ *
+ * HR  = khoảng cách giữa hai R-peak ECG liên tiếp.
+ * PAT = khoảng thời gian từ R-peak ECG đến PPG foot tương ứng ở ngón tay.
  *
  * Copyright (c) 2026 Nguyen Dang Khanh
  * SPDX-License-Identifier: MIT
@@ -22,32 +25,32 @@ class VitalSignsAnalyzer(
     private val ppgFilter = SosIirFilter.ppgBandpass1000Hz()
 
     private val rPeakDetector = RPeakDetector(sampleRateHz)
-    private val ppgPeakDetector = PpgPeakDetector(sampleRateHz)
+    private val ppgFootDetector = PpgFootDetector(sampleRateHz)
 
     private val pendingRPeaks = mutableListOf<Long>()
-    private val ppgPeakHistory = mutableListOf<Long>()
+    private val ppgFootHistory = mutableListOf<Long>()
 
     private var lastRPeakSample: Long? = null
-    private var lastPpgPeakSample: Long? = null
+    private var lastPpgFootSample: Long? = null
     private var latestHeartRateBpm: Double? = null
-    private var latestPttMs: Double? = null
+    private var latestPatMs: Double? = null
 
     fun reset() {
         ecgWindow.clear()
         ppgWindow.clear()
         pendingRPeaks.clear()
-        ppgPeakHistory.clear()
+        ppgFootHistory.clear()
 
         ecgFilter.reset()
         ppgFilter.reset()
 
         rPeakDetector.reset()
-        ppgPeakDetector.reset()
+        ppgFootDetector.reset()
 
         lastRPeakSample = null
-        lastPpgPeakSample = null
+        lastPpgFootSample = null
         latestHeartRateBpm = null
-        latestPttMs = null
+        latestPatMs = null
     }
 
     fun processFrame(
@@ -85,13 +88,13 @@ class VitalSignsAnalyzer(
         SignalPreprocessor.trimWindow(ppgWindow, newestIndex, maxSamples)
 
         val newRPeaks = rPeakDetector.detectNew(ecgWindow)
-        val newPpgPeaks = ppgPeakDetector.detectNew(ppgWindow)
+        val newPpgFeet = ppgFootDetector.detectNew(ppgWindow)
 
         handleRPeaks(newRPeaks)
-        handlePpgPeaks(newPpgPeaks, newestIndex)
-        matchPtt(newestIndex)
+        handlePpgFeet(newPpgFeet, newestIndex)
+        matchPat(newestIndex)
 
-        val status = buildStatusText(newRPeaks.size, newPpgPeaks.size)
+        val status = buildStatusText(newRPeaks.size, newPpgFeet.size)
         return currentResult(status)
     }
 
@@ -113,36 +116,36 @@ class VitalSignsAnalyzer(
         }
     }
 
-    private fun handlePpgPeaks(
-        ppgPeaks: List<Long>,
+    private fun handlePpgFeet(
+        ppgFeet: List<Long>,
         newestIndex: Long
     ) {
-        ppgPeakHistory.addAll(ppgPeaks)
+        ppgFootHistory.addAll(ppgFeet)
 
         val historyWindow = sampleRateHz * 2L
-        ppgPeakHistory.removeAll { peak ->
-            newestIndex - peak > historyWindow
+        ppgFootHistory.removeAll { foot ->
+            newestIndex - foot > historyWindow
         }
     }
 
-    private fun matchPtt(newestIndex: Long) {
-        val minPttSamples = (0.10 * sampleRateHz).toLong()
-        val maxPttSamples = (0.50 * sampleRateHz).toLong()
+    private fun matchPat(newestIndex: Long) {
+        val minPatSamples = (0.08 * sampleRateHz).toLong()
+        val maxPatSamples = (0.40 * sampleRateHz).toLong()
 
         val iterator = pendingRPeaks.iterator()
         while (iterator.hasNext()) {
             val rPeak = iterator.next()
 
-            val matchedPpg = ppgPeakHistory.firstOrNull { ppgPeak ->
-                val diff = ppgPeak - rPeak
-                diff in minPttSamples..maxPttSamples
+            val matchedFoot = ppgFootHistory.firstOrNull { ppgFoot ->
+                val diff = ppgFoot - rPeak
+                diff in minPatSamples..maxPatSamples
             }
 
-            if (matchedPpg != null) {
-                latestPttMs = (matchedPpg - rPeak) * 1000.0 / sampleRateHz
-                lastPpgPeakSample = matchedPpg
+            if (matchedFoot != null) {
+                latestPatMs = (matchedFoot - rPeak) * 1000.0 / sampleRateHz
+                lastPpgFootSample = matchedFoot
                 iterator.remove()
-            } else if (newestIndex - rPeak > maxPttSamples) {
+            } else if (newestIndex - rPeak > maxPatSamples) {
                 iterator.remove()
             }
         }
@@ -151,32 +154,32 @@ class VitalSignsAnalyzer(
     private fun currentResult(status: String): VitalSigns {
         return VitalSigns(
             heartRateBpm = latestHeartRateBpm,
-            pttMs = latestPttMs,
+            patMs = latestPatMs,
             lastRPeakSample = lastRPeakSample,
-            lastPpgPeakSample = lastPpgPeakSample,
+            lastPpgFootSample = lastPpgFootSample,
             statusText = status
         )
     }
 
     private fun buildStatusText(
         newRPeakCount: Int,
-        newPpgPeakCount: Int
+        newPpgFootCount: Int
     ): String {
         return when {
-            latestHeartRateBpm != null && latestPttMs != null ->
-                "HR/PTT ready"
+            latestHeartRateBpm != null && latestPatMs != null ->
+                "HR/PAT ready"
 
             latestHeartRateBpm != null ->
-                "HR ready, waiting PPG peak"
+                "HR ready, waiting PPG foot"
 
-            newRPeakCount > 0 && newPpgPeakCount == 0 ->
-                "R-peak detected, waiting PPG"
+            newRPeakCount > 0 && newPpgFootCount == 0 ->
+                "R-peak detected, waiting PPG foot"
 
-            newPpgPeakCount > 0 && newRPeakCount == 0 ->
-                "PPG peak detected, waiting ECG"
+            newPpgFootCount > 0 && newRPeakCount == 0 ->
+                "PPG foot detected, waiting ECG R-peak"
 
             else ->
-                "Waiting for ECG/PPG peaks"
+                "Waiting for ECG R-peak / PPG foot"
         }
     }
 }

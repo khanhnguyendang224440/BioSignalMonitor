@@ -1,6 +1,6 @@
 /**
  * @file SignalPreprocessor.kt
- * @brief Một số hàm tiền xử lý tín hiệu đơn giản dùng cho HR/PTT.
+ * @brief Một số hàm tiền xử lý tín hiệu đơn giản dùng cho HR/PAT.
  *
  * Các hàm trong file này được thiết kế nhẹ để chạy realtime trên App.
  * Đây không phải pipeline AI ECG denoise; AI denoise vẫn là nhánh xử lý riêng.

@@ -1,0 +1,68 @@
+/**
+ * @file PpgFootDetector.kt
+ * @brief Phát hiện chân sóng PPG IR để tính PAT trên Android App.
+ *
+ * Detector này tìm điểm cực tiểu cục bộ của PPG sau lọc, tương ứng với
+ * PPG foot/onset trước pha đi lên của sóng mạch. Điểm này được ghép với
+ * R-peak ECG để tính PAT = R-peak ECG -> PPG foot.
+ *
+ * Copyright (c) 2026 Nguyen Dang Khanh
+ * SPDX-License-Identifier: MIT
+ */
+package com.example.biosignalmonitor.analysis
+
+class PpgFootDetector(
+    private val sampleRateHz: Int = 1000
+) {
+    private val refractorySamples: Long = (0.30 * sampleRateHz).toLong()
+    private var lastFootSample: Long = Long.MIN_VALUE / 4
+    private var lastProcessedSample: Long = Long.MIN_VALUE / 4
+
+    fun reset() {
+        lastFootSample = Long.MIN_VALUE / 4
+        lastProcessedSample = Long.MIN_VALUE / 4
+    }
+
+    fun detectNew(window: List<IndexedSample>): List<Long> {
+        if (window.size < 5) return emptyList()
+
+        val newestIndex = window.last().index
+        val recent = window.takeLast(minOf(window.size, sampleRateHz * 3))
+        val mean = SignalPreprocessor.mean(recent)
+
+        val centeredRecent = recent.map { it.value - mean }
+        val maxValue = centeredRecent.maxOrNull() ?: return emptyList()
+        val minValue = centeredRecent.minOrNull() ?: return emptyList()
+        val amplitude = maxValue - minValue
+        if (amplitude < 1.0) return emptyList()
+
+        // Với PPG foot, cần bắt vùng thấp của tín hiệu trước pha đi lên.
+        // Ngưỡng này giữ các cực tiểu nằm gần đáy tín hiệu, tránh bắt nhiễu nhỏ.
+        val footThreshold = minValue + amplitude * 0.40
+        val feet = mutableListOf<Long>()
+
+        for (i in 1 until window.size - 1) {
+            val sampleIndex = window[i].index
+
+            if (sampleIndex <= lastProcessedSample) continue
+            if (sampleIndex >= newestIndex) break
+
+            val prev = window[i - 1].value - mean
+            val curr = window[i].value - mean
+            val next = window[i + 1].value - mean
+
+            val isLocalFoot = curr < prev && curr <= next
+            val isNearBottom = curr < footThreshold
+            val isRisingAfterFoot = next > curr
+            val farEnough = sampleIndex - lastFootSample >= refractorySamples
+
+            if (isLocalFoot && isNearBottom && isRisingAfterFoot && farEnough) {
+                feet.add(sampleIndex)
+                lastFootSample = sampleIndex
+            }
+        }
+
+        lastProcessedSample = newestIndex - 1L
+        return feet
+    }
+}

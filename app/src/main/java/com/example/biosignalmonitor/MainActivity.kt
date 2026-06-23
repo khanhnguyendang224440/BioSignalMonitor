@@ -169,8 +169,8 @@ class MainActivity : ComponentActivity() {
                 var currentTimestamp by remember { mutableStateOf(0L) }
                 var globalSampleCounter by remember { mutableStateOf(0L) }
                 var currentHeartRateBpm by remember { mutableStateOf<Double?>(null) }
-                var currentPttMs by remember { mutableStateOf<Double?>(null) }
-                var analysisStatusText by remember { mutableStateOf("Waiting for ECG/PPG peaks") }
+                var currentPatMs by remember { mutableStateOf<Double?>(null) }
+                var analysisStatusText by remember { mutableStateOf("Waiting for ECG R-peak / PPG foot") }
                 var isPaused by remember { mutableStateOf(false) }
                 var showStatistics by remember { mutableStateOf(false) }
 
@@ -196,8 +196,8 @@ class MainActivity : ComponentActivity() {
                     currentTimestamp = 0L
                     globalSampleCounter = 0L
                     currentHeartRateBpm = null
-                    currentPttMs = null
-                    analysisStatusText = "Waiting for ECG/PPG peaks"
+                    currentPatMs = null
+                    analysisStatusText = "Waiting for ECG R-peak / PPG foot"
                     packetCount = 0L
                     parseErrorCount = 0L
                     crcErrorCount = 0L
@@ -251,11 +251,11 @@ class MainActivity : ComponentActivity() {
                     )
 
                     currentHeartRateBpm = vitalSigns.heartRateBpm
-                    currentPttMs = vitalSigns.pttMs
+                    currentPatMs = vitalSigns.patMs
                     analysisStatusText = vitalSigns.statusText
 
                     // Tín hiệu đưa lên màn hình đã qua band-pass filter realtime.
-                    // Packet raw vẫn được giữ nguyên; HR/PTT được xử lý trong VitalSignsAnalyzer.
+                    // Packet raw vẫn được giữ nguyên; HR/PAT được xử lý trong VitalSignsAnalyzer.
                     val filteredEcgForDisplay = displaySignalFilters.filterEcg(frame.ecg)
                     val filteredPpgForDisplay = displaySignalFilters.filterPpgIr(frame.ppgIr)
                     val filteredPcgForDisplay = displaySignalFilters.filterPcg(frame.pcg)
@@ -523,7 +523,7 @@ class MainActivity : ComponentActivity() {
                     sequence = currentSequence,
                     timestamp = currentTimestamp,
                     heartRateBpm = currentHeartRateBpm,
-                    pttMs = currentPttMs,
+                    patMs = currentPatMs,
                     analysisStatusText = analysisStatusText,
                     packetCount = packetCount,
                     parseErrorCount = parseErrorCount,
@@ -579,7 +579,7 @@ fun BioSignalDashboard(
     sequence: Int,
     timestamp: Long,
     heartRateBpm: Double?,
-    pttMs: Double?,
+    patMs: Double?,
     analysisStatusText: String,
     packetCount: Long,
     parseErrorCount: Long,
@@ -621,7 +621,7 @@ fun BioSignalDashboard(
 
             VitalSignsPanel(
                 heartRateBpm = heartRateBpm,
-                pttMs = pttMs,
+                patMs = patMs,
                 statusText = analysisStatusText
             )
 
@@ -673,7 +673,7 @@ fun BioSignalDashboard(
             sequence = sequence,
             timestamp = timestamp,
             heartRateBpm = heartRateBpm,
-            pttMs = pttMs,
+            patMs = patMs,
             analysisStatusText = analysisStatusText,
             packetCount = packetCount,
             parseErrorCount = parseErrorCount,
@@ -738,7 +738,7 @@ fun DashboardHeader(
 @Composable
 fun VitalSignsPanel(
     heartRateBpm: Double?,
-    pttMs: Double?,
+    patMs: Double?,
     statusText: String
 ) {
     Card(
@@ -779,13 +779,13 @@ fun VitalSignsPanel(
             )
 
             Text(
-                text = "PAT: ${formatPtt(pttMs)}",
+                text = "PAT: ${formatPat(patMs)}",
                 color = PpgColor,
                 fontSize = 18.sp
             )
 
             Text(
-                text = "App analysis: ECG R-peak → PPG IR peak",
+                text = "App analysis: ECG R-peak → PPG IR foot",
                 color = SecondaryText,
                 fontSize = 12.sp
             )
@@ -922,7 +922,7 @@ fun StatisticsDialog(
     sequence: Int,
     timestamp: Long,
     heartRateBpm: Double?,
-    pttMs: Double?,
+    patMs: Double?,
     analysisStatusText: String,
     packetCount: Long,
     parseErrorCount: Long,
@@ -981,7 +981,7 @@ fun StatisticsDialog(
                 Text("")
                 Text("=== Vital Signs ===")
                 Text("HR: ${formatHeartRate(heartRateBpm)}")
-                Text("PAT: ${formatPtt(pttMs)}")
+                Text("PAT: ${formatPat(patMs)}")
                 Text("Analysis: $analysisStatusText")
 
                 Text("")
@@ -1007,8 +1007,8 @@ fun formatHeartRate(heartRateBpm: Double?): String {
     } ?: "-- bpm"
 }
 
-fun formatPtt(pttMs: Double?): String {
-    return pttMs?.let { value ->
+fun formatPat(patMs: Double?): String {
+    return patMs?.let { value ->
         "%.0f ms".format(value)
     } ?: "-- ms"
 }
