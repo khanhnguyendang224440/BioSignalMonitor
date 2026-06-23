@@ -84,6 +84,8 @@ private val PcgColor = Color(0xFF35C7FF)
 private val SimulationColor = Color(0xFFFFB020)
 private val BleColor = Color(0xFF38E66B)
 
+private const val DISPLAY_BUFFER_CAPACITY = 10_000
+
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -142,9 +144,17 @@ class MainActivity : ComponentActivity() {
                             }
                     }
 
-                val ecgBuffer = remember { SignalRingBuffer(capacity = 5000) }
-                val ppgBuffer = remember { SignalRingBuffer(capacity = 5000) }
-                val pcgBuffer = remember { SignalRingBuffer(capacity = 5000) }
+                val ecgBuffer = remember {
+                    SignalRingBuffer(capacity = DISPLAY_BUFFER_CAPACITY)
+                }
+
+                val ppgBuffer = remember {
+                    SignalRingBuffer(capacity = DISPLAY_BUFFER_CAPACITY)
+                }
+
+                val pcgBuffer = remember {
+                    SignalRingBuffer(capacity = DISPLAY_BUFFER_CAPACITY)
+                }
 
                 val realtimeAssembler = remember { PacketAssembler() }
                 val bleStreamAssembler = remember { BlePacketStreamAssembler() }
@@ -769,7 +779,7 @@ fun VitalSignsPanel(
             )
 
             Text(
-                text = "PTT: ${formatPtt(pttMs)}",
+                text = "PAT: ${formatPtt(pttMs)}",
                 color = PpgColor,
                 fontSize = 18.sp
             )
@@ -831,7 +841,7 @@ fun SignalCard(
                 )
 
                 Text(
-                    text = "${samples.size}/5000 samples",
+                    text = "${samples.size}/$DISPLAY_BUFFER_CAPACITY samples",
                     color = SecondaryText,
                     fontSize = 11.sp
                 )
@@ -971,14 +981,14 @@ fun StatisticsDialog(
                 Text("")
                 Text("=== Vital Signs ===")
                 Text("HR: ${formatHeartRate(heartRateBpm)}")
-                Text("PTT: ${formatPtt(pttMs)}")
+                Text("PAT: ${formatPtt(pttMs)}")
                 Text("Analysis: $analysisStatusText")
 
                 Text("")
                 Text("=== Ring Buffer ===")
-                Text("ECG buffer: $ecgBufferSize / 5000")
-                Text("PPG buffer: $ppgBufferSize / 5000")
-                Text("PCG buffer: $pcgBufferSize / 5000")
+                Text("ECG buffer: $ecgBufferSize / $DISPLAY_BUFFER_CAPACITY")
+                Text("PPG buffer: $ppgBufferSize / $DISPLAY_BUFFER_CAPACITY")
+                Text("PCG buffer: $pcgBufferSize / $DISPLAY_BUFFER_CAPACITY")
             }
         },
         confirmButton = {
