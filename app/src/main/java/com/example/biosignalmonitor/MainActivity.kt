@@ -164,6 +164,7 @@ class MainActivity : ComponentActivity() {
 
                 var packetCount by remember { mutableStateOf(0L) }
                 var parseErrorCount by remember { mutableStateOf(0L) }
+                var crcErrorCount by remember { mutableStateOf(0L) }
                 var bleNotificationCount by remember { mutableStateOf(0L) }
 
                 fun clearRuntimeData() {
@@ -186,7 +187,29 @@ class MainActivity : ComponentActivity() {
                     analysisStatusText = "Waiting for ECG/PPG peaks"
                     packetCount = 0L
                     parseErrorCount = 0L
+                    crcErrorCount = 0L
                     bleNotificationCount = 0L
+                }
+
+                fun handleParseFailure(
+                    sourceTag: String,
+                    contextMessage: String
+                ) {
+                    if (PacketParser.lastError == PacketParser.ParseError.CRC_MISMATCH) {
+                        crcErrorCount++
+
+                        Log.e(
+                            sourceTag,
+                            "$contextMessage: CRC mismatch"
+                        )
+                    } else {
+                        parseErrorCount++
+
+                        Log.e(
+                            sourceTag,
+                            "$contextMessage: parse error=${PacketParser.lastError}"
+                        )
+                    }
                 }
 
                 fun pushFrameToUi(
@@ -238,6 +261,7 @@ class MainActivity : ComponentActivity() {
                                     "bioRx=${realtimeAssembler.bioPacketsReceived}, " +
                                     "incomplete=${realtimeAssembler.incompleteFrames}, " +
                                     "parseErrors=$parseErrorCount, " +
+                                    "crcErrors=$crcErrorCount, " +
                                     "buffers=${ecgBuffer.size()}/" +
                                     "${ppgBuffer.size()}/" +
                                     "${pcgBuffer.size()}"
@@ -333,10 +357,9 @@ class MainActivity : ComponentActivity() {
                             PacketParser.parse(packetBytes)
 
                         if (parsedPacket == null) {
-                            parseErrorCount++
-                            Log.e(
-                                "BLE_PIPELINE",
-                                "PacketParser failed: " +
+                            handleParseFailure(
+                                sourceTag = "BLE_PIPELINE",
+                                contextMessage = "PacketParser failed: " +
                                         "size=${packetBytes.size}, " +
                                         "head=${packetBytes.toHexPreview()}"
                             )
@@ -430,10 +453,9 @@ class MainActivity : ComponentActivity() {
                                     sourceTag = "REALTIME_TEST"
                                 )
                             } else {
-                                parseErrorCount++
-                                Log.e(
-                                    "REALTIME_TEST",
-                                    "Audio parse failed at seq=$sequence"
+                                handleParseFailure(
+                                    sourceTag = "REALTIME_TEST",
+                                    contextMessage = "Audio parse failed at seq=$sequence"
                                 )
                             }
 
@@ -446,10 +468,9 @@ class MainActivity : ComponentActivity() {
                                     sourceTag = "REALTIME_TEST"
                                 )
                             } else {
-                                parseErrorCount++
-                                Log.e(
-                                    "REALTIME_TEST",
-                                    "Bio parse failed at seq=$sequence"
+                                handleParseFailure(
+                                    sourceTag = "REALTIME_TEST",
+                                    contextMessage = "Bio parse failed at seq=$sequence"
                                 )
                             }
 
@@ -462,6 +483,7 @@ class MainActivity : ComponentActivity() {
                                             "frames=${realtimeAssembler.completedFrames}, " +
                                             "incomplete=${realtimeAssembler.incompleteFrames}, " +
                                             "parseErrors=$parseErrorCount, " +
+                                            "crcErrors=$crcErrorCount, " +
                                             "buffers=${ecgBuffer.size()}/" +
                                             "${ppgBuffer.size()}/" +
                                             "${pcgBuffer.size()}"
@@ -486,6 +508,7 @@ class MainActivity : ComponentActivity() {
                     analysisStatusText = analysisStatusText,
                     packetCount = packetCount,
                     parseErrorCount = parseErrorCount,
+                    crcErrorCount = crcErrorCount,
                     bleNotificationCount = bleNotificationCount,
                     ecgBufferSize = ecgBuffer.size(),
                     ppgBufferSize = ppgBuffer.size(),
@@ -541,6 +564,7 @@ fun BioSignalDashboard(
     analysisStatusText: String,
     packetCount: Long,
     parseErrorCount: Long,
+    crcErrorCount: Long,
     bleNotificationCount: Long,
     ecgBufferSize: Int,
     ppgBufferSize: Int,
@@ -628,6 +652,7 @@ fun BioSignalDashboard(
             analysisStatusText = analysisStatusText,
             packetCount = packetCount,
             parseErrorCount = parseErrorCount,
+            crcErrorCount = crcErrorCount,
             bleNotificationCount = bleNotificationCount,
             ecgBufferSize = ecgBufferSize,
             ppgBufferSize = ppgBufferSize,
@@ -872,6 +897,7 @@ fun StatisticsDialog(
     analysisStatusText: String,
     packetCount: Long,
     parseErrorCount: Long,
+    crcErrorCount: Long,
     bleNotificationCount: Long,
     ecgBufferSize: Int,
     ppgBufferSize: Int,
@@ -921,6 +947,7 @@ fun StatisticsDialog(
                 Text("Parsed packets: $packetCount")
                 Text("BLE notifications: $bleNotificationCount")
                 Text("Parse errors: $parseErrorCount")
+                Text("CRC errors: $crcErrorCount")
 
                 Text("")
                 Text("=== Vital Signs ===")

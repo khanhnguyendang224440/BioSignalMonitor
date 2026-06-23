@@ -85,7 +85,8 @@ object FakeBleSource {
             payloadLength = BIO_PAYLOAD_SIZE
         )
 
-        // PPG IR[32] - uint32_t. Tạo pulse PPG xuất hiện sau R-peak khoảng 220 ms
+        // PPG IR[32] - uint32_t.
+        // Tạo pulse PPG xuất hiện sau R-peak khoảng 220 ms
         // để kiểm thử thuật toán PTT trên App mà không đổi format packet.
         for (i in 0 until SAMPLE_COUNT) {
             val globalSample = sequence * SAMPLE_COUNT + i
@@ -105,7 +106,8 @@ object FakeBleSource {
             buffer.putInt(value)
         }
 
-        // ECG[32] - int16_t. Tạo QRS giả với R-peak rõ để test HR.
+        // ECG[32] - int16_t.
+        // Tạo QRS giả với R-peak rõ để test HR.
         for (i in 0 until SAMPLE_COUNT) {
             val globalSample = sequence * SAMPLE_COUNT + i
             val phase = positiveModulo(
@@ -153,10 +155,45 @@ object FakeBleSource {
     }
 
     private fun putFooter(buffer: ByteBuffer) {
-        // Tạm thời CRC = 0x0000.
-        // Sang bước sau mới tính CRC16-CCITT thật.
-        buffer.putShort(0)
+        /*
+         * CRC16-CCITT được tính trên:
+         * Header + Version + Type + Sequence + PayloadLength + Payload
+         *
+         * Không tính chính trường CRC và Footer.
+         * Cách này khớp với STM32/ESP32:
+         * Init = 0xFFFF, Polynomial = 0x1021.
+         */
+        val crcLength = buffer.position()
+        val crc = crc16Ccitt(
+            data = buffer.array(),
+            offset = 0,
+            length = crcLength
+        )
+
+        buffer.putShort(crc.toShort())
         buffer.put(FOOTER)
+    }
+
+    private fun crc16Ccitt(
+        data: ByteArray,
+        offset: Int,
+        length: Int
+    ): Int {
+        var crc = 0xFFFF
+
+        for (index in offset until offset + length) {
+            crc = crc xor ((data[index].toInt() and 0xFF) shl 8)
+
+            repeat(8) {
+                crc = if ((crc and 0x8000) != 0) {
+                    ((crc shl 1) xor 0x1021) and 0xFFFF
+                } else {
+                    (crc shl 1) and 0xFFFF
+                }
+            }
+        }
+
+        return crc and 0xFFFF
     }
 
     private fun gaussian(
