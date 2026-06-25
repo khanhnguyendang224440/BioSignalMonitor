@@ -17,6 +17,8 @@ package com.example.biosignalmonitor
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -99,6 +101,14 @@ class MainActivity : ComponentActivity() {
                     Handler(Looper.getMainLooper())
                 }
 
+                val heartBeatToneGenerator = remember {
+                    ToneGenerator(AudioManager.STREAM_MUSIC, 80)
+                }
+
+                var lastBeepedRPeakSample by remember {
+                    mutableStateOf<Long?>(null)
+                }
+
                 var blePermissionGranted by remember {
                     mutableStateOf(hasBlePermissions(context))
                 }
@@ -169,7 +179,7 @@ class MainActivity : ComponentActivity() {
                 var currentTimestamp by remember { mutableStateOf(0L) }
                 var globalSampleCounter by remember { mutableStateOf(0L) }
                 var currentHeartRateBpm by remember { mutableStateOf<Double?>(null) }
-                var currentPatMs by remember { mutableStateOf<Double?>(null) }
+                var currentPatMeanMs by remember { mutableStateOf<Double?>(null) }
                 var analysisStatusText by remember { mutableStateOf("Waiting for ECG R-peak / PPG foot") }
                 var isPaused by remember { mutableStateOf(false) }
                 var showStatistics by remember { mutableStateOf(false) }
@@ -196,7 +206,8 @@ class MainActivity : ComponentActivity() {
                     currentTimestamp = 0L
                     globalSampleCounter = 0L
                     currentHeartRateBpm = null
-                    currentPatMs = null
+                    currentPatMeanMs = null
+                    lastBeepedRPeakSample = null
                     analysisStatusText = "Waiting for ECG R-peak / PPG foot"
                     packetCount = 0L
                     parseErrorCount = 0L
@@ -251,8 +262,20 @@ class MainActivity : ComponentActivity() {
                     )
 
                     currentHeartRateBpm = vitalSigns.heartRateBpm
-                    currentPatMs = vitalSigns.patMs
+                    currentPatMeanMs = vitalSigns.patMeanMs
                     analysisStatusText = vitalSigns.statusText
+
+                    val currentRPeakSample = vitalSigns.lastRPeakSample
+                    if (currentRPeakSample != null && currentRPeakSample != lastBeepedRPeakSample) {
+                        lastBeepedRPeakSample = currentRPeakSample
+
+                        // Âm beep chỉ là phản hồi nghe được khi app bắt được R-peak,
+                        // không phải cảnh báo y tế.
+                        heartBeatToneGenerator.startTone(
+                            ToneGenerator.TONE_PROP_BEEP,
+                            80
+                        )
+                    }
 
                     // Tín hiệu đưa lên màn hình đã qua band-pass filter realtime.
                     // Packet raw vẫn được giữ nguyên; HR/PAT được xử lý trong VitalSignsAnalyzer.
@@ -449,6 +472,7 @@ class MainActivity : ComponentActivity() {
                 DisposableEffect(Unit) {
                     onDispose {
                         bleManager.disconnect()
+                        heartBeatToneGenerator.release()
                     }
                 }
 
@@ -522,8 +546,9 @@ class MainActivity : ComponentActivity() {
                     pcg = pcgSamples,
                     sequence = currentSequence,
                     timestamp = currentTimestamp,
+                    sweepSampleIndex = currentTimestamp,
                     heartRateBpm = currentHeartRateBpm,
-                    patMs = currentPatMs,
+                    patMs = currentPatMeanMs,
                     analysisStatusText = analysisStatusText,
                     packetCount = packetCount,
                     parseErrorCount = parseErrorCount,
@@ -578,6 +603,7 @@ fun BioSignalDashboard(
     pcg: FloatArray,
     sequence: Int,
     timestamp: Long,
+    sweepSampleIndex: Long,
     heartRateBpm: Double?,
     patMs: Double?,
     analysisStatusText: String,
@@ -630,6 +656,7 @@ fun BioSignalDashboard(
                 subtitle = "Điện tim",
                 sampleRate = "1000 Hz",
                 samples = ecg,
+                sweepSampleIndex = sweepSampleIndex,
                 lineColor = EcgColor,
                 modifier = Modifier.weight(1f),
                 displayGain = 1.2f,
@@ -641,6 +668,7 @@ fun BioSignalDashboard(
                 subtitle = "Mạch máu",
                 sampleRate = "1000 Hz",
                 samples = ppg,
+                sweepSampleIndex = sweepSampleIndex,
                 lineColor = PpgColor,
                 modifier = Modifier.weight(1f),
                 displayGain = 0.8f,
@@ -652,6 +680,7 @@ fun BioSignalDashboard(
                 subtitle = "Âm tim",
                 sampleRate = "1000 Hz",
                 samples = pcg,
+                sweepSampleIndex = sweepSampleIndex,
                 lineColor = PcgColor,
                 modifier = Modifier.weight(1f),
                 displayGain = 1.0f,
@@ -779,7 +808,7 @@ fun VitalSignsPanel(
             )
 
             Text(
-                text = "PAT: ${formatPat(patMs)}",
+                text = "PAT mean: ${formatPat(patMs)}",
                 color = PpgColor,
                 fontSize = 18.sp
             )
@@ -799,6 +828,7 @@ fun SignalCard(
     subtitle: String,
     sampleRate: String,
     samples: FloatArray,
+    sweepSampleIndex: Long,
     lineColor: Color,
     modifier: Modifier = Modifier,
     displayGain: Float = 1.0f,
@@ -849,6 +879,8 @@ fun SignalCard(
 
             WaveformCanvas(
                 samples = samples,
+                sweepSampleIndex = sweepSampleIndex,
+                displayCapacity = DISPLAY_BUFFER_CAPACITY,
                 lineColor = lineColor,
                 displayGain = displayGain,
                 clipStd = clipStd,
@@ -981,7 +1013,7 @@ fun StatisticsDialog(
                 Text("")
                 Text("=== Vital Signs ===")
                 Text("HR: ${formatHeartRate(heartRateBpm)}")
-                Text("PAT: ${formatPat(patMs)}")
+                Text("PAT mean: ${formatPat(patMs)}")
                 Text("Analysis: $analysisStatusText")
 
                 Text("")

@@ -29,17 +29,20 @@ class VitalSignsAnalyzer(
 
     private val pendingRPeaks = mutableListOf<Long>()
     private val ppgFootHistory = mutableListOf<Long>()
+    private val patHistory = mutableListOf<IndexedSample>()
 
     private var lastRPeakSample: Long? = null
     private var lastPpgFootSample: Long? = null
     private var latestHeartRateBpm: Double? = null
     private var latestPatMs: Double? = null
+    private var latestPatMeanMs: Double? = null
 
     fun reset() {
         ecgWindow.clear()
         ppgWindow.clear()
         pendingRPeaks.clear()
         ppgFootHistory.clear()
+        patHistory.clear()
 
         ecgFilter.reset()
         ppgFilter.reset()
@@ -51,6 +54,7 @@ class VitalSignsAnalyzer(
         lastPpgFootSample = null
         latestHeartRateBpm = null
         latestPatMs = null
+        latestPatMeanMs = null
     }
 
     fun processFrame(
@@ -129,8 +133,10 @@ class VitalSignsAnalyzer(
     }
 
     private fun matchPat(newestIndex: Long) {
-        val minPatSamples = (0.08 * sampleRateHz).toLong()
-        val maxPatSamples = (0.40 * sampleRateHz).toLong()
+        // Chỉ ghép R-peak ECG với PPG foot nếu PAT nằm trong khoảng 250--350 ms.
+        // Với sampleRateHz = 1000 Hz: 250 ms = 250 mẫu, 350 ms = 350 mẫu.
+        val minPatSamples = (0.25 * sampleRateHz).toLong()
+        val maxPatSamples = (0.35 * sampleRateHz).toLong()
 
         val iterator = pendingRPeaks.iterator()
         while (iterator.hasNext()) {
@@ -142,8 +148,14 @@ class VitalSignsAnalyzer(
             }
 
             if (matchedFoot != null) {
-                latestPatMs = (matchedFoot - rPeak) * 1000.0 / sampleRateHz
+                val patMs = (matchedFoot - rPeak) * 1000.0 / sampleRateHz
+                latestPatMs = patMs
                 lastPpgFootSample = matchedFoot
+                addPatToRollingWindow(
+                    patSampleIndex = matchedFoot,
+                    patMs = patMs,
+                    newestIndex = newestIndex
+                )
                 iterator.remove()
             } else if (newestIndex - rPeak > maxPatSamples) {
                 iterator.remove()
@@ -151,10 +163,36 @@ class VitalSignsAnalyzer(
         }
     }
 
+
+    private fun addPatToRollingWindow(
+        patSampleIndex: Long,
+        patMs: Double,
+        newestIndex: Long
+    ) {
+        patHistory.add(
+            IndexedSample(
+                index = patSampleIndex,
+                value = patMs
+            )
+        )
+
+        val rollingWindowSamples = sampleRateHz * 10L
+        patHistory.removeAll { pat ->
+            newestIndex - pat.index > rollingWindowSamples
+        }
+
+        latestPatMeanMs = if (patHistory.isNotEmpty()) {
+            patHistory.sumOf { pat -> pat.value } / patHistory.size
+        } else {
+            null
+        }
+    }
+
     private fun currentResult(status: String): VitalSigns {
         return VitalSigns(
             heartRateBpm = latestHeartRateBpm,
             patMs = latestPatMs,
+            patMeanMs = latestPatMeanMs,
             lastRPeakSample = lastRPeakSample,
             lastPpgFootSample = lastPpgFootSample,
             statusText = status
@@ -166,8 +204,8 @@ class VitalSignsAnalyzer(
         newPpgFootCount: Int
     ): String {
         return when {
-            latestHeartRateBpm != null && latestPatMs != null ->
-                "HR/PAT ready"
+            latestHeartRateBpm != null && latestPatMeanMs != null ->
+                "HR/PAT mean ready"
 
             latestHeartRateBpm != null ->
                 "HR ready, waiting PPG foot"

@@ -14,6 +14,7 @@ package com.example.biosignalmonitor.analysis
 data class VitalSigns(
     val heartRateBpm: Double? = null,
     val patMs: Double? = null,
+    val patMeanMs: Double? = null,
     val lastRPeakSample: Long? = null,
     val lastPpgFootSample: Long? = null,
     val statusText: String = "Waiting for ECG R-peak / PPG foot"

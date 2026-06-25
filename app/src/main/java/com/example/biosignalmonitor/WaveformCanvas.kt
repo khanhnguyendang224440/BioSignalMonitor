@@ -1,9 +1,12 @@
 /**
  * @file WaveformCanvas.kt
- * @brief Vẽ waveform của các tín hiệu ECG, PPG và PCG trên giao diện.
+ * @brief Vẽ waveform ECG, PPG và PCG theo kiểu sweep display.
  *
- * WaveformCanvas chỉ xử lý tỉ lệ hiển thị. Bộ lọc tín hiệu realtime được đặt
- * ở AppSignalFilters/VitalSignsAnalyzer, không đặt trong lớp vẽ Canvas.
+ * Kiểu sweep display giống monitor bệnh viện: con trỏ quét chạy từ trái
+ * sang phải; dữ liệu mới được vẽ tại vị trí con trỏ, hết khung thì quay
+ * lại đầu và ghi đè lên dữ liệu cũ. Canvas chỉ xử lý tỉ lệ hiển thị và
+ * vị trí vẽ; bộ lọc tín hiệu realtime được đặt ở AppSignalFilters/
+ * VitalSignsAnalyzer, không đặt trong lớp vẽ Canvas.
  *
  * Copyright (c) 2026 Nguyen Dang Khanh
  * 9/6/2026
@@ -25,6 +28,8 @@ import kotlin.math.tanh
 @Composable
 fun WaveformCanvas(
     samples: FloatArray,
+    sweepSampleIndex: Long,
+    displayCapacity: Int,
     modifier: Modifier = Modifier,
     lineColor: Color = Color.Green,
     displayGain: Float = 1.0f,
@@ -63,7 +68,7 @@ fun WaveformCanvas(
             strokeWidth = 1.5f
         )
 
-        if (samples.size < 2) return@Canvas
+        if (samples.size < 2 || displayCapacity < 2) return@Canvas
 
         val mean = samples.sum() / samples.size.toFloat()
 
@@ -82,11 +87,28 @@ fun WaveformCanvas(
         val halfHeight = usableHeight / 2f
         val centerY = topPadding + halfHeight
 
-        val path = Path()
+        fun positiveModulo(value: Long, modulo: Int): Int {
+            val result = value % modulo
+            return if (result < 0) {
+                (result + modulo).toInt()
+            } else {
+                result.toInt()
+            }
+        }
 
-        samples.forEachIndexed { index, value ->
-            val x = index.toFloat() /
-                    (samples.size - 1).toFloat() *
+        fun pointForSample(
+            localIndex: Int,
+            value: Float
+        ): Pair<Int, Offset> {
+            // sweepSampleIndex là chỉ số mẫu kế tiếp sẽ được ghi.
+            // Vì samples đang là snapshot theo thứ tự thời gian cũ → mới,
+            // mẫu đầu tiên có chỉ số tuyệt đối là sweepSampleIndex - samples.size.
+            val firstAbsoluteSampleIndex = sweepSampleIndex - samples.size.toLong()
+            val absoluteSampleIndex = firstAbsoluteSampleIndex + localIndex.toLong()
+            val screenIndex = positiveModulo(absoluteSampleIndex, displayCapacity)
+
+            val x = screenIndex.toFloat() /
+                    (displayCapacity - 1).toFloat() *
                     canvasWidth
 
             val normalized = (value - mean) / displayLimit * displayGain
@@ -95,17 +117,61 @@ fun WaveformCanvas(
             val safeNormalized = tanh(normalized.toDouble()).toFloat()
             val y = centerY - safeNormalized * halfHeight
 
-            if (index == 0) {
-                path.moveTo(x, y)
-            } else {
-                path.lineTo(x, y)
-            }
+            return screenIndex to Offset(x, y)
         }
 
-        drawPath(
-            path = path,
-            color = lineColor,
-            style = Stroke(width = 2.5f)
+        val paths = mutableListOf<Path>()
+        var currentPath = Path()
+        var hasCurrentPath = false
+        var previousScreenIndex: Int? = null
+
+        samples.forEachIndexed { index, value ->
+            val (screenIndex, point) = pointForSample(index, value)
+
+            // Khi con trỏ sweep quay từ cuối khung về đầu khung, không nối
+            // đoạn cuối màn hình với đoạn đầu màn hình để tránh đường chéo giả.
+            if (previousScreenIndex != null && screenIndex < previousScreenIndex!!) {
+                if (hasCurrentPath) {
+                    paths.add(currentPath)
+                }
+                currentPath = Path()
+                currentPath.moveTo(point.x, point.y)
+                hasCurrentPath = true
+            } else {
+                if (!hasCurrentPath) {
+                    currentPath.moveTo(point.x, point.y)
+                    hasCurrentPath = true
+                } else {
+                    currentPath.lineTo(point.x, point.y)
+                }
+            }
+
+            previousScreenIndex = screenIndex
+        }
+
+        if (hasCurrentPath) {
+            paths.add(currentPath)
+        }
+
+        for (path in paths) {
+            drawPath(
+                path = path,
+                color = lineColor,
+                style = Stroke(width = 2.5f)
+            )
+        }
+
+        // Vạch quét hiện tại: vị trí mẫu kế tiếp sẽ được vẽ/ghi đè.
+        val sweepScreenIndex = positiveModulo(sweepSampleIndex, displayCapacity)
+        val sweepX = sweepScreenIndex.toFloat() /
+                (displayCapacity - 1).toFloat() *
+                canvasWidth
+
+        drawLine(
+            color = Color.White.copy(alpha = 0.65f),
+            start = Offset(sweepX, 0f),
+            end = Offset(sweepX, canvasHeight),
+            strokeWidth = 2f
         )
     }
 }
