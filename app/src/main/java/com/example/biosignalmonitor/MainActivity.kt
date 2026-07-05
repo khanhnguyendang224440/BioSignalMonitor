@@ -179,8 +179,15 @@ class MainActivity : ComponentActivity() {
                 var currentTimestamp by remember { mutableStateOf(0L) }
                 var globalSampleCounter by remember { mutableStateOf(0L) }
                 var currentHeartRateBpm by remember { mutableStateOf<Double?>(null) }
-                var currentPatMeanMs by remember { mutableStateOf<Double?>(null) }
+                var measuredPatMeanMs by remember { mutableStateOf<Double?>(null) }
+                var estimatedSbpMmHg by remember { mutableStateOf<Double?>(null) }
+                var estimatedDbpMmHg by remember { mutableStateOf<Double?>(null) }
                 var analysisStatusText by remember { mutableStateOf("Waiting for ECG R-peak / PPG foot") }
+                var bloodPressureStatusText by remember { mutableStateOf("Chưa đo huyết áp") }
+                var isBloodPressureMeasuring by remember { mutableStateOf(false) }
+                var bloodPressureStartSample by remember { mutableStateOf<Long?>(null) }
+                var bloodPressurePatValues by remember { mutableStateOf<List<Double>>(emptyList()) }
+                var lastCollectedPatFootSample by remember { mutableStateOf<Long?>(null) }
                 var isPaused by remember { mutableStateOf(false) }
                 var showStatistics by remember { mutableStateOf(false) }
 
@@ -206,13 +213,31 @@ class MainActivity : ComponentActivity() {
                     currentTimestamp = 0L
                     globalSampleCounter = 0L
                     currentHeartRateBpm = null
-                    currentPatMeanMs = null
+                    measuredPatMeanMs = null
+                    estimatedSbpMmHg = null
+                    estimatedDbpMmHg = null
                     lastBeepedRPeakSample = null
                     analysisStatusText = "Waiting for ECG R-peak / PPG foot"
+                    bloodPressureStatusText = "Chưa đo huyết áp"
+                    isBloodPressureMeasuring = false
+                    bloodPressureStartSample = null
+                    bloodPressurePatValues = emptyList()
+                    lastCollectedPatFootSample = null
                     packetCount = 0L
                     parseErrorCount = 0L
                     crcErrorCount = 0L
                     bleNotificationCount = 0L
+                }
+
+                fun startBloodPressureMeasurement() {
+                    isBloodPressureMeasuring = true
+                    bloodPressureStartSample = currentTimestamp
+                    bloodPressurePatValues = emptyList()
+                    lastCollectedPatFootSample = null
+                    measuredPatMeanMs = null
+                    estimatedSbpMmHg = null
+                    estimatedDbpMmHg = null
+                    bloodPressureStatusText = "Đang đo huyết áp:\n10s | 0 PAT"
                 }
 
                 fun handleParseFailure(
@@ -262,8 +287,54 @@ class MainActivity : ComponentActivity() {
                     )
 
                     currentHeartRateBpm = vitalSigns.heartRateBpm
-                    currentPatMeanMs = vitalSigns.patMeanMs
                     analysisStatusText = vitalSigns.statusText
+
+                    val measurementStart = bloodPressureStartSample
+                    if (isBloodPressureMeasuring && measurementStart != null) {
+                        var updatedPatValues = bloodPressurePatValues
+                        val currentPpgFootSample = vitalSigns.lastPpgFootSample
+                        val currentPatMs = vitalSigns.patMs
+
+                        if (
+                            currentPatMs != null &&
+                            currentPpgFootSample != null &&
+                            currentPpgFootSample != lastCollectedPatFootSample &&
+                            currentPpgFootSample >= measurementStart
+                        ) {
+                            updatedPatValues = updatedPatValues + currentPatMs
+                            bloodPressurePatValues = updatedPatValues
+                            lastCollectedPatFootSample = currentPpgFootSample
+                        }
+
+                        val elapsedSamples = globalSampleCounter - measurementStart
+                        val remainingSamples =
+                            (10_000L - elapsedSamples)
+                                .coerceAtLeast(0L)
+                        val remainingSeconds =
+                            ((remainingSamples + 999L) / 1000L).coerceAtLeast(0L)
+
+                        if (elapsedSamples >= 10_000L) {
+                            isBloodPressureMeasuring = false
+                            bloodPressureStartSample = null
+
+                            if (updatedPatValues.isNotEmpty()) {
+                                val patMeanMs = updatedPatValues.average()
+                                val estimate = estimateBloodPressureFromPatMean(patMeanMs)
+
+                                measuredPatMeanMs = patMeanMs
+                                estimatedSbpMmHg = estimate.sbpMmHg
+                                estimatedDbpMmHg = estimate.dbpMmHg
+                                bloodPressureStatusText = "Đo xong"
+                            } else {
+                                bloodPressureStatusText =
+                                    "Không đủ PAT trong 10 s, hãy đo lại"
+                            }
+                        } else {
+                            bloodPressureStatusText =
+                                "Đang đo huyết áp:\n${remainingSeconds}s | " +
+                                        "${updatedPatValues.size} PAT"
+                        }
+                    }
 
                     val currentRPeakSample = vitalSigns.lastRPeakSample
                     if (currentRPeakSample != null && currentRPeakSample != lastBeepedRPeakSample) {
@@ -548,8 +619,11 @@ class MainActivity : ComponentActivity() {
                     timestamp = currentTimestamp,
                     sweepSampleIndex = currentTimestamp,
                     heartRateBpm = currentHeartRateBpm,
-                    patMs = currentPatMeanMs,
+                    patMs = measuredPatMeanMs,
+                    sbpMmHg = estimatedSbpMmHg,
+                    dbpMmHg = estimatedDbpMmHg,
                     analysisStatusText = analysisStatusText,
+                    bloodPressureStatusText = bloodPressureStatusText,
                     packetCount = packetCount,
                     parseErrorCount = parseErrorCount,
                     crcErrorCount = crcErrorCount,
@@ -562,6 +636,7 @@ class MainActivity : ComponentActivity() {
                     bleStatusText = bleStatusText,
                     isPaused = isPaused,
                     showStatistics = showStatistics,
+                    isBloodPressureMeasuring = isBloodPressureMeasuring,
                     onPauseToggle = {
                         isPaused = !isPaused
                     },
@@ -570,6 +645,9 @@ class MainActivity : ComponentActivity() {
                     },
                     onShowStatistics = {
                         showStatistics = true
+                    },
+                    onMeasureBloodPressure = {
+                        startBloodPressureMeasurement()
                     },
                     onCloseStatistics = {
                         showStatistics = false
@@ -606,7 +684,10 @@ fun BioSignalDashboard(
     sweepSampleIndex: Long,
     heartRateBpm: Double?,
     patMs: Double?,
+    sbpMmHg: Double?,
+    dbpMmHg: Double?,
     analysisStatusText: String,
+    bloodPressureStatusText: String,
     packetCount: Long,
     parseErrorCount: Long,
     crcErrorCount: Long,
@@ -619,9 +700,11 @@ fun BioSignalDashboard(
     bleStatusText: String,
     isPaused: Boolean,
     showStatistics: Boolean,
+    isBloodPressureMeasuring: Boolean,
     onPauseToggle: () -> Unit,
     onReset: () -> Unit,
     onShowStatistics: () -> Unit,
+    onMeasureBloodPressure: () -> Unit,
     onCloseStatistics: () -> Unit,
     onConnectBle: () -> Unit
 ) {
@@ -648,13 +731,14 @@ fun BioSignalDashboard(
             VitalSignsPanel(
                 heartRateBpm = heartRateBpm,
                 patMs = patMs,
-                statusText = analysisStatusText
+                sbpMmHg = sbpMmHg,
+                dbpMmHg = dbpMmHg,
+                statusText = bloodPressureStatusText
             )
 
             SignalCard(
                 title = "ECG",
                 subtitle = "Điện tim",
-                sampleRate = "1000 Hz",
                 samples = ecg,
                 sweepSampleIndex = sweepSampleIndex,
                 lineColor = EcgColor,
@@ -666,7 +750,6 @@ fun BioSignalDashboard(
             SignalCard(
                 title = "PPG",
                 subtitle = "Mạch máu",
-                sampleRate = "1000 Hz",
                 samples = ppg,
                 sweepSampleIndex = sweepSampleIndex,
                 lineColor = PpgColor,
@@ -678,7 +761,6 @@ fun BioSignalDashboard(
             SignalCard(
                 title = "PCG",
                 subtitle = "Âm tim",
-                sampleRate = "1000 Hz",
                 samples = pcg,
                 sweepSampleIndex = sweepSampleIndex,
                 lineColor = PcgColor,
@@ -692,6 +774,8 @@ fun BioSignalDashboard(
                 onPauseToggle = onPauseToggle,
                 onReset = onReset,
                 onShowStatistics = onShowStatistics,
+                onMeasureBloodPressure = onMeasureBloodPressure,
+                isBloodPressureMeasuring = isBloodPressureMeasuring,
                 onConnectBle = onConnectBle
             )
         }
@@ -703,7 +787,10 @@ fun BioSignalDashboard(
             timestamp = timestamp,
             heartRateBpm = heartRateBpm,
             patMs = patMs,
+            sbpMmHg = sbpMmHg,
+            dbpMmHg = dbpMmHg,
             analysisStatusText = analysisStatusText,
+            bloodPressureStatusText = bloodPressureStatusText,
             packetCount = packetCount,
             parseErrorCount = parseErrorCount,
             crcErrorCount = crcErrorCount,
@@ -768,8 +855,12 @@ fun DashboardHeader(
 fun VitalSignsPanel(
     heartRateBpm: Double?,
     patMs: Double?,
+    sbpMmHg: Double?,
+    dbpMmHg: Double?,
     statusText: String
 ) {
+    val statusParts = statusText.split("\n", limit = 2)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -795,10 +886,17 @@ fun VitalSignsPanel(
                     fontSize = 17.sp
                 )
                 Text(
-                    text = statusText,
+                    text = statusParts[0],
                     color = SecondaryText,
                     fontSize = 11.sp
                 )
+                if (statusParts.size > 1) {
+                    Text(
+                        text = statusParts[1],
+                        color = SecondaryText,
+                        fontSize = 11.sp
+                    )
+                }
             }
 
             Text(
@@ -813,11 +911,18 @@ fun VitalSignsPanel(
                 fontSize = 18.sp
             )
 
-            Text(
-                text = "App analysis: ECG R-peak → PPG IR foot",
-                color = SecondaryText,
-                fontSize = 12.sp
-            )
+            Column {
+                Text(
+                    text = "SBP: ${formatPressure(sbpMmHg)}",
+                    color = PrimaryText,
+                    fontSize = 17.sp
+                )
+                Text(
+                    text = "DBP: ${formatPressure(dbpMmHg)}",
+                    color = PrimaryText,
+                    fontSize = 17.sp
+                )
+            }
         }
     }
 }
@@ -826,7 +931,6 @@ fun VitalSignsPanel(
 fun SignalCard(
     title: String,
     subtitle: String,
-    sampleRate: String,
     samples: FloatArray,
     sweepSampleIndex: Long,
     lineColor: Color,
@@ -863,18 +967,6 @@ fun SignalCard(
                     color = SecondaryText,
                     fontSize = 11.sp
                 )
-
-                Text(
-                    text = sampleRate,
-                    color = PrimaryText,
-                    fontSize = 12.sp
-                )
-
-                Text(
-                    text = "${samples.size}/$DISPLAY_BUFFER_CAPACITY samples",
-                    color = SecondaryText,
-                    fontSize = 11.sp
-                )
             }
 
             WaveformCanvas(
@@ -898,6 +990,8 @@ fun ControlBar(
     onPauseToggle: () -> Unit,
     onReset: () -> Unit,
     onShowStatistics: () -> Unit,
+    onMeasureBloodPressure: () -> Unit,
+    isBloodPressureMeasuring: Boolean,
     onConnectBle: () -> Unit
 ) {
     Row(
@@ -907,7 +1001,7 @@ fun ControlBar(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Button(
+        OutlinedButton(
             onClick = onPauseToggle
         ) {
             Text(
@@ -929,6 +1023,19 @@ fun ControlBar(
             onClick = onShowStatistics
         ) {
             Text("Statistics")
+        }
+
+        Button(
+            onClick = onMeasureBloodPressure,
+            enabled = !isBloodPressureMeasuring
+        ) {
+            Text(
+                if (isBloodPressureMeasuring) {
+                    "Đang đo..."
+                } else {
+                    "Đo huyết áp"
+                }
+            )
         }
 
         Spacer(modifier = Modifier.weight(1f))
@@ -955,7 +1062,10 @@ fun StatisticsDialog(
     timestamp: Long,
     heartRateBpm: Double?,
     patMs: Double?,
+    sbpMmHg: Double?,
+    dbpMmHg: Double?,
     analysisStatusText: String,
+    bloodPressureStatusText: String,
     packetCount: Long,
     parseErrorCount: Long,
     crcErrorCount: Long,
@@ -988,20 +1098,6 @@ fun StatisticsDialog(
                 Text("BLE status: $bleStatusText")
 
                 Text("")
-                Text("=== Packet Format ===")
-                Text("Packet strategy: Split Audio/Bio")
-                Text("Header: 0xAA")
-                Text("Version: 0x01")
-                Text("Footer: 0x55")
-                Text("Audio type: 0x01")
-                Text("Bio type: 0x02")
-
-                Text("")
-                Text("=== Packet Size ===")
-                Text("Audio packet: 137 bytes")
-                Text("Bio packet: 201 bytes")
-
-                Text("")
                 Text("=== Runtime ===")
                 Text("Sequence: $sequence")
                 Text("Running time: ${formatTime(timestamp)}")
@@ -1014,13 +1110,11 @@ fun StatisticsDialog(
                 Text("=== Vital Signs ===")
                 Text("HR: ${formatHeartRate(heartRateBpm)}")
                 Text("PAT mean: ${formatPat(patMs)}")
+                Text("SBP: ${formatPressure(sbpMmHg)}")
+                Text("DBP: ${formatPressure(dbpMmHg)}")
+                Text("Blood pressure: $bloodPressureStatusText")
                 Text("Analysis: $analysisStatusText")
 
-                Text("")
-                Text("=== Ring Buffer ===")
-                Text("ECG buffer: $ecgBufferSize / $DISPLAY_BUFFER_CAPACITY")
-                Text("PPG buffer: $ppgBufferSize / $DISPLAY_BUFFER_CAPACITY")
-                Text("PCG buffer: $pcgBufferSize / $DISPLAY_BUFFER_CAPACITY")
             }
         },
         confirmButton = {
@@ -1043,6 +1137,26 @@ fun formatPat(patMs: Double?): String {
     return patMs?.let { value ->
         "%.0f ms".format(value)
     } ?: "-- ms"
+}
+
+fun formatPressure(pressureMmHg: Double?): String {
+    return pressureMmHg?.let { value ->
+        "%.0f mmHg".format(value)
+    } ?: "-- mmHg"
+}
+
+private data class BloodPressureEstimate(
+    val sbpMmHg: Double,
+    val dbpMmHg: Double
+)
+
+private fun estimateBloodPressureFromPatMean(
+    patMeanMs: Double
+): BloodPressureEstimate {
+    return BloodPressureEstimate(
+        sbpMmHg = -0.3871 * patMeanMs + 240.4769,
+        dbpMmHg = -0.4739 * patMeanMs + 219.4496
+    )
 }
 
 fun formatTime(timestampMs: Long): String {
