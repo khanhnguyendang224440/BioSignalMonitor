@@ -15,6 +15,8 @@ class PpgFootDetector(
     private val sampleRateHz: Int = 1000
 ) {
     private val refractorySamples: Long = (0.30 * sampleRateHz).toLong()
+    private val lookAheadSamples: Int = (0.08 * sampleRateHz).toInt()
+        .coerceAtLeast(3)
     private var lastFootSample: Long = Long.MIN_VALUE / 4
     private var lastProcessedSample: Long = Long.MIN_VALUE / 4
 
@@ -24,7 +26,7 @@ class PpgFootDetector(
     }
 
     fun detectNew(window: List<IndexedSample>): List<Long> {
-        if (window.size < 5) return emptyList()
+        if (window.size < lookAheadSamples + 3) return emptyList()
 
         val newestIndex = window.last().index
         val recent = window.takeLast(minOf(window.size, sampleRateHz * 3))
@@ -36,12 +38,15 @@ class PpgFootDetector(
         val amplitude = maxValue - minValue
         if (amplitude < 1.0) return emptyList()
 
-        // Với PPG foot, cần bắt vùng thấp của tín hiệu trước pha đi lên.
-        // Ngưỡng này giữ các cực tiểu nằm gần đáy tín hiệu, tránh bắt nhiễu nhỏ.
-        val footThreshold = minValue + amplitude * 0.40
+        // Với PPG foot, cần bắt vùng đáy trước pha đi lên rõ của sóng mạch.
+        val footThreshold = minValue + amplitude * 0.55
+        val minRiseAfterFoot = amplitude * 0.18
         val feet = mutableListOf<Long>()
 
-        for (i in 1 until window.size - 1) {
+        val maxProcessPosition = window.size - lookAheadSamples - 1
+        if (maxProcessPosition <= 1) return emptyList()
+
+        for (i in 1..maxProcessPosition) {
             val sampleIndex = window[i].index
 
             if (sampleIndex <= lastProcessedSample) continue
@@ -50,10 +55,14 @@ class PpgFootDetector(
             val prev = window[i - 1].value - mean
             val curr = window[i].value - mean
             val next = window[i + 1].value - mean
+            val maxAfterFoot = ((i + 1)..(i + lookAheadSamples))
+                .maxOf { position ->
+                    window[position].value - mean
+                }
 
-            val isLocalFoot = curr < prev && curr <= next
-            val isNearBottom = curr < footThreshold
-            val isRisingAfterFoot = next > curr
+            val isLocalFoot = curr <= prev && curr <= next
+            val isNearBottom = curr <= footThreshold
+            val isRisingAfterFoot = maxAfterFoot - curr >= minRiseAfterFoot
             val farEnough = sampleIndex - lastFootSample >= refractorySamples
 
             if (isLocalFoot && isNearBottom && isRisingAfterFoot && farEnough) {
@@ -62,7 +71,7 @@ class PpgFootDetector(
             }
         }
 
-        lastProcessedSample = newestIndex - 1L
+        lastProcessedSample = window[maxProcessPosition].index
         return feet
     }
 }

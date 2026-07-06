@@ -133,10 +133,10 @@ class VitalSignsAnalyzer(
     }
 
     private fun matchPat(newestIndex: Long) {
-        // Chỉ ghép R-peak ECG với PPG foot nếu PAT nằm trong khoảng 250--350 ms.
-        // Với sampleRateHz = 1000 Hz: 250 ms = 250 mẫu, 350 ms = 350 mẫu.
-        val minPatSamples = (0.25 * sampleRateHz).toLong()
-        val maxPatSamples = (0.35 * sampleRateHz).toLong()
+        // PAT vẫn được tính từ R-peak ECG tới PPG foot/đáy tương ứng.
+        // Mở rộng cửa sổ ghép để không bỏ sót nhịp khi tín hiệu thực tế lệch nhẹ.
+        val minPatSamples = (0.18 * sampleRateHz).toLong()
+        val maxPatSamples = (0.50 * sampleRateHz).toLong()
 
         val iterator = pendingRPeaks.iterator()
         while (iterator.hasNext()) {
