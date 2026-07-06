@@ -24,6 +24,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -59,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -190,6 +194,10 @@ class MainActivity : ComponentActivity() {
                 var lastCollectedPatFootSample by remember { mutableStateOf<Long?>(null) }
                 var isPaused by remember { mutableStateOf(false) }
                 var showStatistics by remember { mutableStateOf(false) }
+                var showMeasurementHistory by remember { mutableStateOf(false) }
+                var measurementHistory by remember {
+                    mutableStateOf(loadMeasurementHistory(context))
+                }
 
                 var packetCount by remember { mutableStateOf(0L) }
                 var parseErrorCount by remember { mutableStateOf(0L) }
@@ -324,6 +332,24 @@ class MainActivity : ComponentActivity() {
                                 measuredPatMeanMs = patMeanMs
                                 estimatedSbpMmHg = estimate.sbpMmHg
                                 estimatedDbpMmHg = estimate.dbpMmHg
+
+                                val newRecord = MeasurementHistoryRecord(
+                                    measuredAt = formatMeasurementDateTime(
+                                        System.currentTimeMillis()
+                                    ),
+                                    heartRateBpm = currentHeartRateBpm,
+                                    sbpMmHg = estimate.sbpMmHg,
+                                    dbpMmHg = estimate.dbpMmHg
+                                )
+                                val updatedHistory =
+                                    (listOf(newRecord) + measurementHistory)
+                                        .take(MEASUREMENT_HISTORY_MAX_SIZE)
+                                measurementHistory = updatedHistory
+                                saveMeasurementHistory(
+                                    context = context,
+                                    history = updatedHistory
+                                )
+
                                 bloodPressureStatusText = "Đo xong"
                             } else {
                                 bloodPressureStatusText =
@@ -636,6 +662,8 @@ class MainActivity : ComponentActivity() {
                     bleStatusText = bleStatusText,
                     isPaused = isPaused,
                     showStatistics = showStatistics,
+                    showMeasurementHistory = showMeasurementHistory,
+                    measurementHistory = measurementHistory,
                     isBloodPressureMeasuring = isBloodPressureMeasuring,
                     onPauseToggle = {
                         isPaused = !isPaused
@@ -646,11 +674,21 @@ class MainActivity : ComponentActivity() {
                     onShowStatistics = {
                         showStatistics = true
                     },
+                    onShowMeasurementHistory = {
+                        showMeasurementHistory = true
+                    },
                     onMeasureBloodPressure = {
                         startBloodPressureMeasurement()
                     },
                     onCloseStatistics = {
                         showStatistics = false
+                    },
+                    onCloseMeasurementHistory = {
+                        showMeasurementHistory = false
+                    },
+                    onClearMeasurementHistory = {
+                        measurementHistory = emptyList()
+                        clearMeasurementHistory(context)
                     },
                     onConnectBle = {
                         if (hasBlePermissions(context)) {
@@ -700,12 +738,17 @@ fun BioSignalDashboard(
     bleStatusText: String,
     isPaused: Boolean,
     showStatistics: Boolean,
+    showMeasurementHistory: Boolean,
+    measurementHistory: List<MeasurementHistoryRecord>,
     isBloodPressureMeasuring: Boolean,
     onPauseToggle: () -> Unit,
     onReset: () -> Unit,
     onShowStatistics: () -> Unit,
+    onShowMeasurementHistory: () -> Unit,
     onMeasureBloodPressure: () -> Unit,
     onCloseStatistics: () -> Unit,
+    onCloseMeasurementHistory: () -> Unit,
+    onClearMeasurementHistory: () -> Unit,
     onConnectBle: () -> Unit
 ) {
     Surface(
@@ -774,6 +817,7 @@ fun BioSignalDashboard(
                 onPauseToggle = onPauseToggle,
                 onReset = onReset,
                 onShowStatistics = onShowStatistics,
+                onShowMeasurementHistory = onShowMeasurementHistory,
                 onMeasureBloodPressure = onMeasureBloodPressure,
                 isBloodPressureMeasuring = isBloodPressureMeasuring,
                 onConnectBle = onConnectBle
@@ -801,6 +845,14 @@ fun BioSignalDashboard(
             modeText = modeText,
             bleStatusText = bleStatusText,
             onDismiss = onCloseStatistics
+        )
+    }
+
+    if (showMeasurementHistory) {
+        MeasurementHistoryDialog(
+            history = measurementHistory,
+            onDismiss = onCloseMeasurementHistory,
+            onClearHistory = onClearMeasurementHistory
         )
     }
 }
@@ -990,6 +1042,7 @@ fun ControlBar(
     onPauseToggle: () -> Unit,
     onReset: () -> Unit,
     onShowStatistics: () -> Unit,
+    onShowMeasurementHistory: () -> Unit,
     onMeasureBloodPressure: () -> Unit,
     isBloodPressureMeasuring: Boolean,
     onConnectBle: () -> Unit
@@ -1047,12 +1100,142 @@ fun ControlBar(
             Text("Connect BLE")
         }
 
-        OutlinedButton(
-            onClick = {},
-            enabled = false
+        Button(
+            onClick = onShowMeasurementHistory,
+            enabled = true
         ) {
-            Text("Save CSV")
+            Text(
+                text = "Theo dõi",
+                fontWeight = FontWeight.Bold
+            )
         }
+    }
+}
+
+@Composable
+fun MeasurementHistoryDialog(
+    history: List<MeasurementHistoryRecord>,
+    onDismiss: () -> Unit,
+    onClearHistory: () -> Unit
+) {
+    val scrollState = rememberScrollState()
+    val historyTitleColor = Color(0xFF1F2937)
+    val historyHeaderColor = Color(0xFF374151)
+    val historyTextColor = Color(0xFF4B5563)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Lịch sử đo",
+                color = historyTitleColor,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (history.isEmpty()) {
+                    Text(
+                        text = "Chưa có dữ liệu đo",
+                        color = historyTextColor,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                } else {
+                    MeasurementHistoryRow(
+                        measuredAt = "Ngày giờ",
+                        heartRate = "HR",
+                        sbp = "SBP",
+                        dbp = "DBP",
+                        textColor = historyHeaderColor,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    history.forEach { record ->
+                        MeasurementHistoryRow(
+                            measuredAt = record.measuredAt,
+                            heartRate = formatHeartRate(record.heartRateBpm),
+                            sbp = formatPressure(record.sbpMmHg),
+                            dbp = formatPressure(record.dbpMmHg),
+                            textColor = historyTextColor,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        },
+        dismissButton = {
+            Button(
+                onClick = onClearHistory,
+                enabled = history.isNotEmpty()
+            ) {
+                Text(
+                    text = "Xóa lịch sử",
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss
+            ) {
+                Text(
+                    text = "Đóng",
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    )
+}
+
+@Composable
+fun MeasurementHistoryRow(
+    measuredAt: String,
+    heartRate: String,
+    sbp: String,
+    dbp: String,
+    textColor: Color,
+    fontWeight: FontWeight = FontWeight.Medium
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = measuredAt,
+            color = textColor,
+            fontSize = 12.sp,
+            fontWeight = fontWeight,
+            modifier = Modifier.weight(1.35f)
+        )
+        Text(
+            text = heartRate,
+            color = textColor,
+            fontSize = 12.sp,
+            fontWeight = fontWeight,
+            modifier = Modifier.weight(0.85f)
+        )
+        Text(
+            text = sbp,
+            color = textColor,
+            fontSize = 12.sp,
+            fontWeight = fontWeight,
+            modifier = Modifier.weight(0.85f)
+        )
+        Text(
+            text = dbp,
+            color = textColor,
+            fontSize = 12.sp,
+            fontWeight = fontWeight,
+            modifier = Modifier.weight(0.85f)
+        )
     }
 }
 
@@ -1143,6 +1326,101 @@ fun formatPressure(pressureMmHg: Double?): String {
     return pressureMmHg?.let { value ->
         "%.0f mmHg".format(value)
     } ?: "-- mmHg"
+}
+
+data class MeasurementHistoryRecord(
+    val measuredAt: String,
+    val heartRateBpm: Double?,
+    val sbpMmHg: Double,
+    val dbpMmHg: Double
+)
+
+private const val MEASUREMENT_HISTORY_PREFS = "measurement_history_prefs"
+private const val MEASUREMENT_HISTORY_KEY = "measurement_history"
+private const val MEASUREMENT_HISTORY_MAX_SIZE = 20
+
+private fun formatMeasurementDateTime(
+    timestampMillis: Long
+): String {
+    val formatter = SimpleDateFormat(
+        "dd/MM/yyyy HH:mm:ss",
+        Locale.getDefault()
+    )
+    return formatter.format(Date(timestampMillis))
+}
+
+private fun saveMeasurementHistory(
+    context: Context,
+    history: List<MeasurementHistoryRecord>
+) {
+    val encoded = history
+        .take(MEASUREMENT_HISTORY_MAX_SIZE)
+        .joinToString("\n") { record ->
+            listOf(
+                record.measuredAt,
+                record.heartRateBpm?.toString() ?: "",
+                record.sbpMmHg.toString(),
+                record.dbpMmHg.toString()
+            ).joinToString("|")
+        }
+
+    context
+        .getSharedPreferences(
+            MEASUREMENT_HISTORY_PREFS,
+            Context.MODE_PRIVATE
+        )
+        .edit()
+        .putString(MEASUREMENT_HISTORY_KEY, encoded)
+        .apply()
+}
+
+private fun clearMeasurementHistory(
+    context: Context
+) {
+    context
+        .getSharedPreferences(
+            MEASUREMENT_HISTORY_PREFS,
+            Context.MODE_PRIVATE
+        )
+        .edit()
+        .remove(MEASUREMENT_HISTORY_KEY)
+        .apply()
+}
+
+private fun loadMeasurementHistory(
+    context: Context
+): List<MeasurementHistoryRecord> {
+    val encoded = context
+        .getSharedPreferences(
+            MEASUREMENT_HISTORY_PREFS,
+            Context.MODE_PRIVATE
+        )
+        .getString(MEASUREMENT_HISTORY_KEY, null)
+        ?: return emptyList()
+
+    return encoded
+        .lineSequence()
+        .mapNotNull { line ->
+            val parts = line.split("|")
+            if (parts.size != 4) {
+                return@mapNotNull null
+            }
+
+            val sbp = parts[2].toDoubleOrNull()
+            val dbp = parts[3].toDoubleOrNull()
+            if (sbp == null || dbp == null) {
+                return@mapNotNull null
+            }
+
+            MeasurementHistoryRecord(
+                measuredAt = parts[0],
+                heartRateBpm = parts[1].toDoubleOrNull(),
+                sbpMmHg = sbp,
+                dbpMmHg = dbp
+            )
+        }
+        .take(MEASUREMENT_HISTORY_MAX_SIZE)
+        .toList()
 }
 
 private data class BloodPressureEstimate(
